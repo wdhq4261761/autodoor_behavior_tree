@@ -124,15 +124,22 @@ class LLMClient:
                 ("not supported" in msg or "not valid" in msg or "invalidparameter" in msg))
 
     def chat_with_image(self, text_prompt: str, image_base64: str,
-                        image_detail: str = "high",
+                        image_detail: Optional[str] = None,
+                        image_mime: str = "image/png",
                         system_prompt: str = "",
                         temperature: float = 0.3) -> Dict[str, Any]:
-        """发送带图片的对话请求（VLM）
+        """发送带图片的对话请求（VLM，OpenAI 兼容协议）
 
         Args:
             text_prompt: 文本提示
-            image_base64: base64 编码的图片数据（不含 data:image/... 前缀）
-            image_detail: 图片精度 "low" / "high" / "auto"
+            image_base64: base64 编码的图片数据（不含 data: 前缀）
+            image_detail: 图片精度 "low" / "high" / "auto；
+                默认 None 表示不发送 detail 字段。该字段是 OpenAI 官方私有参数，
+                智谱 / 通义 / Ollama / 部分中转网关等 OpenAI 兼容 VLM 可能不识别
+                并直接返回 400/422，因此默认不发送；仅在需要精细控制
+                （如使用 OpenAI 官方模型）时显式传入。
+            image_mime: 图片 MIME 类型（如 image/png / image/jpeg / image/webp），
+                必须与 image_base64 的真实数据格式一致，否则服务端解码失败。
             system_prompt: 系统提示词
             temperature: 温度参数
 
@@ -143,21 +150,46 @@ class LLMClient:
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
 
+        image_url = {"url": f"data:{image_mime};base64,{image_base64}"}
+        if image_detail:
+            image_url["detail"] = image_detail
         messages.append({
             "role": "user",
             "content": [
                 {"type": "text", "text": text_prompt},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{image_base64}",
-                        "detail": image_detail,
-                    },
-                },
+                {"type": "image_url", "image_url": image_url},
             ],
         })
 
-        return self.chat(messages, temperature=temperature)
+        response_format = None
+        # 仅当显式配置 json_mode=json_object 时启用 JSON 输出约束；
+        # 不支持的模型由 chat() 的 auto 降级逻辑自动去掉后重试。
+        if self.json_mode == "json_object":
+            response_format = {"type": "json_object"}
+
+        try:
+            return self.chat(messages, temperature=temperature,
+                             response_format=response_format)
+        except LLMClientError as e:
+            # 非 OpenAI 网关可能不识别 detail 字段：移除后重试一次
+            if image_detail and self._is_vision_detail_rejected(e):
+                self._debug("[LLM] VLM 网关拒绝 detail 字段，降级为不发送重试")
+                image_url.pop("detail", None)
+                return self.chat(messages, temperature=temperature,
+                                 response_format=response_format)
+            raise
+
+    @staticmethod
+    def _is_vision_detail_rejected(error: LLMClientError) -> bool:
+        """判断错误是否为网关不识别 image_url.detail 等扩展字段"""
+        msg = str(error).lower()
+        return ("400" in msg or "422" in msg) and any(
+            k in msg for k in (
+                "detail", "additional properties", "unknown field",
+                "unexpected field", "not supported", "invalid parameter",
+                "invalid request",
+            )
+        )
 
     def _post(self, path: str, payload: dict) -> dict:
         """发送 POST 请求
@@ -170,10 +202,11 @@ class LLMClient:
         结尾）时，直接使用整个 base_url，避免重复拼接路径。
         """
         url = self.base_url if self.base_url.endswith(path) else f"{self.base_url}{path}"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
+        headers = {"Content-Type": "application/json"}
+        # 本地模型（Ollama / LM Studio 等）通常不配置 api_key，
+        # 空 key 时不发送 Authorization 头，避免部分网关拒绝空 Bearer。
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         self._debug(f"[LLM] POST {url} | model={self.model} | timeout={self.timeout_ms}ms")
         try:
             resp = requests.post(
@@ -207,3 +240,4 @@ class LLMClient:
                 print(message, flush=True)
             except Exception:
                 pass
+
