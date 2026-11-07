@@ -332,10 +332,22 @@ def run_headless(tree_file, project_root=None):
 
 def main():
     # CLI 模式检测
-    if len(sys.argv) > 1 and sys.argv[1] in ("run", "schedule", "status", "stop", "daemon", "remote", "plugin", "config"):
-        from cli import main as cli_main
-        cli_main()
-        return
+    # 命令名从 cli.COMMAND_NAMES 取，避免与 cli.py 的子命令定义漂移。
+    # 打包成 exe 后这是 CLI 的唯一入口，漏一个命令就会退回 GUI 启动。
+    if len(sys.argv) > 1:
+        _cli_commands = None
+        try:
+            from cli import COMMAND_NAMES as _cli_commands
+        except Exception as _e:
+            write_log(f"CLI command table unavailable: {_e}")
+        if _cli_commands is None:
+            # 兜底：与 cli.py 的 COMMAND_NAMES 保持一致
+            _cli_commands = ("run", "status", "stop", "schedule", "daemon",
+                             "remote", "plugin", "config", "ai", "assets")
+        if sys.argv[1] in _cli_commands:
+            from cli import main as cli_main
+            cli_main()
+            return
 
     args = parse_args()
 

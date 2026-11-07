@@ -3,7 +3,43 @@ import sys
 import argparse
 
 
+# CLI 子命令名集合。
+# main.py 用它判断"当前进程是 CLI 调用还是 GUI 启动"——
+# 这是打包成 exe 后 CLI 仍可用的唯一开关。
+# 新增子命令时必须同步加到这里，否则打包版会把它当成 GUI 参数而启动图形界面。
+COMMAND_NAMES = (
+    "run",
+    "status",
+    "stop",
+    "schedule",
+    "daemon",
+    "remote",
+    "plugin",
+    "config",
+    "ai",
+    "assets",
+)
+
+
+def _ensure_utf8_stdio():
+    """管道/重定向场景统一使用 UTF-8 输出
+
+    交互式控制台（isatty 为真）保持系统代码页，避免 CMD 直接运行时乱码；
+    被重定向到文件或作为子进程管道读取时（DSH、CI、AI agent）改用 UTF-8，
+    否则读取方按 UTF-8 解码 GBK 字节会得到乱码。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is None or stream.isatty():
+                continue
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            # reconfigure 不可用（如被替换成非 TextIOWrapper）时静默跳过
+            pass
+
+
 def main():
+    _ensure_utf8_stdio()
     parser = argparse.ArgumentParser(
         prog="autodoor-bt",
         description="AutoDoor 行为树 CLI 工具"
@@ -73,6 +109,7 @@ def main():
     plugin_parser = subparsers.add_parser("plugin", help="插件管理")
     plugin_sub = plugin_parser.add_subparsers(dest="plugin_action")
     plugin_sub.add_parser("list", help="列出已安装插件")
+    plugin_sub.add_parser("nodes", help="列出插件提供的节点类型与参数")
     plugin_load = plugin_sub.add_parser("load", help="加载插件")
     plugin_load.add_argument("path", help="插件目录路径")
     plugin_start = plugin_sub.add_parser("start", help="启动插件")
@@ -83,6 +120,38 @@ def main():
     plugin_info.add_argument("name")
     plugin_unload = plugin_sub.add_parser("unload", help="卸载插件")
     plugin_unload.add_argument("name")
+
+    # assets 命令（制作期视觉素材落盘与校验）
+    assets_parser = subparsers.add_parser("assets", help="视觉素材清单管理")
+    assets_sub = assets_parser.add_subparsers(dest="assets_action")
+
+    assets_add = assets_sub.add_parser("add", help="从截图裁剪并登记一条素材")
+    assets_add.add_argument("--name", required=True, help="素材名（模板文件名）")
+    assets_add.add_argument("--source", help="源图路径（与 --capture 二选一）")
+    assets_add.add_argument("--capture", help="直接截屏，格式 x1,y1,x2,y2")
+    assets_add.add_argument("--origin", help="源图左上角对应的屏幕坐标 x,y")
+    assets_add.add_argument("--bbox", required=True, help="裁剪框（源图内坐标）x1,y1,x2,y2")
+    assets_add.add_argument("--semantic", help="语义描述，供人工核对与追溯")
+    assets_add.add_argument("--color", help="指定主色 #RRGGBB，缺省自动提取")
+    assets_add.add_argument("--anchor", default="center", choices=["center", "topleft"])
+    assets_add.add_argument("--refine-color",
+                            help="精定位颜色 #RRGGBB：把 VLM 粗框外扩后用颜色连通域refine")
+    assets_add.add_argument("--refine-expand", type=float, default=3.0,
+                            help="精定位外扩倍数，默认 3.0（太小会截断目标）")
+    assets_add.add_argument("--refine-tolerance", type=int, default=50,
+                            help="精定位颜色容差，默认 50")
+    assets_add.add_argument("--hwnd", type=int, help="目标窗口句柄，用于换算客户区坐标")
+    assets_add.add_argument("--offset", help="窗口客户区屏幕原点 x,y（无 hwnd 时的替代）")
+    assets_add.add_argument("--project", help="项目根目录，默认当前目录")
+    assets_add.add_argument("--manifest", help="manifest 路径，默认 assets/manifest.json")
+
+    assets_verify = assets_sub.add_parser("verify", help="校验 manifest 与模板一致性")
+    assets_verify.add_argument("--project", help="项目根目录，默认当前目录")
+    assets_verify.add_argument("--manifest", help="manifest 路径")
+
+    assets_list = assets_sub.add_parser("list", help="列出已登记素材")
+    assets_list.add_argument("--project", help="项目根目录，默认当前目录")
+    assets_list.add_argument("--manifest", help="manifest 路径")
 
     # config 命令
     config_parser = subparsers.add_parser("config", help="配置管理")
@@ -167,6 +236,9 @@ def _dispatch(args):
     elif cmd == "ai":
         from bt_cli.commands.ai import cmd_ai
         cmd_ai(args)
+    elif cmd == "assets":
+        from bt_cli.commands.assets import cmd_assets
+        cmd_assets(args)
     else:
         print(f"未知命令: {cmd}")
         sys.exit(1)

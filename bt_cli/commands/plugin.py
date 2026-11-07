@@ -20,15 +20,16 @@ def cmd_plugin(args):
     loader = PluginLoader(context)
 
     # 先扫描和加载已知的插件
-    builtin_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "bt_plugins", "builtin")
+    from bt_utils.resource_manager import get_builtin_plugins_dir, get_user_plugin_dir
+    builtin_dir = get_builtin_plugins_dir()
     if os.path.isdir(builtin_dir):
         infos = loader.scan(builtin_dir)
         for info in infos:
             plugin_dir = os.path.join(builtin_dir, info.name)
             loader.load_plugin(plugin_dir)
 
-    # 也扫描用户插件目录
-    user_dir = os.path.join(os.getcwd(), "plugins")
+    # 也扫描用户插件目录（打包版落在 exe 同级，不依赖 cwd）
+    user_dir = get_user_plugin_dir()
     if os.path.isdir(user_dir):
         infos = loader.scan(user_dir)
         for info in infos:
@@ -37,6 +38,8 @@ def cmd_plugin(args):
 
     if action == "list":
         _list_plugins(loader)
+    elif action == "nodes":
+        _list_plugin_nodes(loader)
     elif action == "load":
         _load_plugin(loader, args)
     elif action == "start":
@@ -66,6 +69,66 @@ def _list_plugins(loader):
         print(f"    分类: {info.category}")
         print(f"    状态: {status}")
         print("-" * 60)
+
+
+def _list_plugin_nodes(loader):
+    """列出所有插件提供的节点类型与参数 schema（节点名带插件名前缀）
+
+    用于 AI/DSH agent 发现插件能力：内置节点只覆盖 29 种，插件节点以
+    ``{插件名}.{节点类型}`` 形式注册（如 math_expressions.ExpressionNode），
+    在 structure.json / tree.json 中必须使用这种带前缀的名字。
+    """
+    # 启动全部插件以填充 display_info 与 schema（幂等，已启动直接返回）
+    for info in loader.list_plugins():
+        loader.start_plugin(info.name)
+
+    display = loader.get_registered_display_info()
+    schemas = loader.get_registered_schemas()
+
+    infos = loader.list_plugins()
+    if not infos:
+        print("无已加载的插件")
+        return
+
+    total = 0
+    for info in infos:
+        prefix = info.name + "."
+        node_types = sorted([t for t in display if t.startswith(prefix)])
+        for t in schemas:
+            if t.startswith(prefix) and t not in node_types:
+                node_types.append(t)
+        node_types.sort()
+
+        if not node_types:
+            continue
+
+        print(f"\n{'='*60}")
+        print(f"  插件: {info.display_name} ({info.name}) v{info.version}")
+        print(f"  作者: {info.author}")
+        print(f"  描述: {info.description}")
+        print(f"{'='*60}")
+
+        for node_type in node_types:
+            total += 1
+            meta = display.get(node_type, {})
+            schema = schemas.get(node_type, [])
+            print(f"\n  [{node_type}]")
+            print(f"    显示名: {meta.get('display_name', '')}")
+            print(f"    描述: {meta.get('description', '')}")
+            print(f"    分类: {meta.get('category', 'plugin')}")
+            if schema:
+                print(f"    参数:")
+                for s in schema:
+                    default = s.get("default")
+                    if isinstance(default, str):
+                        default_str = f'"{default}"'
+                    elif isinstance(default, bool):
+                        default_str = "true" if default else "false"
+                    else:
+                        default_str = str(default)
+                    print(f"      {s.get('key')} ({s.get('type', 'text')}) = {default_str}  — {s.get('label', '')}")
+
+    print(f"\n共 {total} 个插件节点")
 
 
 def _load_plugin(loader, args):
