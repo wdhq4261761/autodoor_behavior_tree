@@ -192,7 +192,18 @@ a = Analysis(
         'pywintypes',
         'pythoncom',
         'ctypes',
-    ] + collect_submodules('pynput') + collect_submodules('bt_core') + collect_submodules('bt_gui') + collect_submodules('bt_nodes') + collect_submodules('bt_utils') + collect_submodules('rapidocr'),
+
+        # plugins/uia_bridge 依赖：pywinauto 的 uia backend 走 comtypes，
+        # 两者都有动态加载路径，必须显式声明，否则打包后 import 即失败。
+        'pywinauto',
+        'pywinauto.application',
+        'pywinauto.controls.uiawrapper',
+        'pywinauto.controls.win32_controls',
+        'pywinauto.findwindows',
+        'comtypes',
+        'comtypes.client',
+        'comtypes.stream',
+    ] + collect_submodules('pynput') + collect_submodules('bt_core') + collect_submodules('bt_gui') + collect_submodules('bt_nodes') + collect_submodules('bt_utils') + collect_submodules('rapidocr') + collect_submodules('pywinauto') + collect_submodules('comtypes'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -223,6 +234,30 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+# ── CLI 专用可执行体 ──
+# 为什么需要第二个 exe：release 版 GUI 用 console=False，进程没有 stdout 句柄，
+# 被 DSH / CI 以子进程调用时（execSync 捕获 stdout）拿到的永远是空字符串。
+# 因此另出一个 console=True 的同入口 exe，两者共享同一份 _internal 运行时，
+# 增量成本仅为一个小 bootloader（约 2MB），不影响 GUI 体积。
+# 命名不带版本号，便于外部脚本（DSH 工具集）写稳定路径。
+exe_cli = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='autodoor-cli',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=os.path.join(project_root, 'assets', 'icons', 'autodoor.ico'),
+)
 
 exclude_binaries = [
     'onnxruntime_providers_cuda.dll',
@@ -261,6 +296,7 @@ exe = EXE(
 
 coll = COLLECT(
     exe,
+    exe_cli,
     a.binaries,
     a.zipfiles,
     a.datas,

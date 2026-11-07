@@ -1,0 +1,17 @@
+# 开发/测试依赖（仅跑测试需要，运行时不需要）
+#
+# 安装：
+#   venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
+#
+# 说明：为什么不把 pytest 放进 requirements.txt——
+#   目标机器只需要运行 AutoDoor 时不必装测试框架；两者分离后，
+#   生产环境的最小依赖集更清晰。
+
+pytest>=8.0.0
+pytest-mock>=3.12.0
+
+# starlette 新版 TestClient 要求 httpx2（旧版走 httpx 兼容层）。
+# 纯净环境装出的 starlette 若是新版，缺它会使 REST/SSE 相关测试直接报：
+#   RuntimeError: The starlette.testclient module requires the httpx2 package
+# 这是测试依赖，不是运行时依赖，故放这里。
+httpx2>=0.1.0

@@ -1,19 +1,36 @@
+# ── 核心运行时 ──
 customtkinter>=5.2.0,<6.0.0
 Pillow>=10.0.0
+# numpy 上界已放开：实测 2.5.2 下全量测试与 RapidOCR 推理均正常。
+# 必须与下面的 opencv 下限配套——opencv < 4.10 不提供 numpy 2 ABI 兼容 wheel，
+# 若 numpy 2.x 混装 opencv 4.5~4.9，import cv2 会报 "numpy.core.multiarray failed to import"。
+numpy>=1.21.0
+opencv-python-headless>=4.10.0
+imagehash>=4.3.0
+
+# ── 输入与屏幕 ──
 pyautogui>=0.9.54
+pynput>=1.7.6
+pywin32>=305
+screeninfo>=0.6.7
+
+# ── OCR ──
 rapidocr>=1.3.0
 onnxruntime==1.19.0
+
+# ── 其他运行时 ──
 pygame>=2.0.0
-pynput>=1.7.6
-opencv-python-headless>=4.5.0
-numpy>=1.21.0,<2.0.0
-screeninfo>=0.6.7
-pywin32>=305
 PyYAML>=6.0
 pyperclip>=1.8.2
-imagehash>=4.3.0
 requests>=2.31.0
 websockets>=12.0
+
+# ── REST / 事件流服务（仅 run --rest 与 daemon 模式需要）──
 fastapi>=0.104.0
 uvicorn>=0.24.0
 sse-starlette>=1.8.0
+
+# ── 插件依赖 ──
+# plugins/uia_bridge 的硬依赖：缺失时该插件在加载阶段即抛 ModuleNotFoundError。
+# 体积很小（<2MB，含 comtypes），故并入主清单，避免"装完主依赖插件仍不可用"。
+pywinauto>=0.6.9
