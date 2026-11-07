@@ -31,7 +31,15 @@ _MISSING_OPTIONAL_DEPS = [
     "win32event",
 ]
 for _name in _MISSING_OPTIONAL_DEPS:
-    if _name not in sys.modules:
+    if _name in sys.modules:
+        continue
+    try:
+        # 只有"确实无法导入"的模块才注入 Mock。
+        # 原实现只判断 sys.modules，会在纯净环境或不同执行顺序下，
+        # 把已安装的 cv2 / rapidocr 等真实模块替换成 MagicMock 并永久驻留，
+        # 导致后续测试拿到 MagicMock 而大面积失败（表现为解包得到 0 个值）。
+        __import__(_name)
+    except ImportError:
         sys.modules[_name] = MagicMock()
 
 
