@@ -872,6 +872,15 @@ class ConditionNode(Node):
             match = re.search(r'RGB\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)', color_config, re.IGNORECASE)
             if match:
                 return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+            # 十六进制颜色: #RRGGBB / RRGGBB / #RGB（最常见格式，此前未支持）
+            hex6 = re.match(r'^#?([0-9a-fA-F]{6})$', color_config.strip())
+            if hex6:
+                h = hex6.group(1)
+                return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+            hex3 = re.match(r'^#?([0-9a-fA-F]{3})$', color_config.strip())
+            if hex3:
+                h = hex3.group(1)
+                return tuple(int(c * 2, 16) for c in h)
             try:
                 parts = [int(x.strip()) for x in color_config.split(",")]
                 if len(parts) >= 3:
@@ -881,20 +890,44 @@ class ConditionNode(Node):
         return (255, 0, 0)
 
     def _adjust_position(self, position: tuple, context=None) -> tuple:
-        """调整坐标（加上区域偏移）
+        """把检测到的「图像内坐标」换算为「屏幕绝对坐标」
+
+        三种情形：
+
+        1. 配置了 region：截图是该 region 的裁剪，图像原点即 region 左上角，
+           加上 region 偏移即可。
+        2. 未配置 region 且绑定了窗口：截图是窗口图像，坐标是窗口内相对坐标，
+           @p 原样返回，由 ExecutionContext 的 execute_mouse_* 负责换算。
+        3. 未配置 region 且未绑定窗口：截图是**整个虚拟桌面**，其图像原点对应
+           虚拟桌面左上角 (min_x, min_y)。多显示器时 min_x/min_y 可能为负
+           （副屏挂在主屏左侧/上方），此时若不补偿，点击位置会整体偏移
+           |min_x| 像素且不会报错——这类缺陷极难排查。
 
         Args:
-            position: 相对位置
+            position: 图像内坐标
             context: 执行上下文
 
         Returns:
-            绝对位置
+            屏幕绝对坐标（或窗口内相对坐标）
         """
         if position is None:
             return None
         region = self._get_effective_region(context) if context else self._parse_region(self.config.get("region", None))
         if region:
             return (position[0] + region[0], position[1] + region[1])
+
+        # 绑定窗口时为窗口内相对坐标，交给 execute_mouse_* 换算
+        if context is not None and getattr(context, "get_bound_window", None):
+            if context.get_bound_window():
+                return position
+
+        try:
+            from bt_utils.screen_utils import get_virtual_screen_bounds
+            min_x, min_y, _, _ = get_virtual_screen_bounds()
+            if min_x or min_y:
+                return (position[0] + min_x, position[1] + min_y)
+        except Exception:
+            pass
         return position
 
     def _apply_offset(self, position: tuple) -> tuple:
@@ -1065,7 +1098,18 @@ class ConditionNode(Node):
 
         cx, cy = int(pos[0]), int(pos[1])
         r = self._DEFAULT_REGION_RADIUS
-        return (max(0, cx - r), max(0, cy - r), cx + r, cy + r)
+
+        # 边界用虚拟桌面范围而非 0：多显示器时虚拟桌面原点可为负，
+        # 直接用 max(0, ...) 会把副屏上的区域错误裁到主屏
+        try:
+            from bt_utils.screen_utils import get_virtual_screen_bounds
+            min_x, min_y, max_x, max_y = get_virtual_screen_bounds()
+        except Exception:
+            min_x = min_y = 0
+            max_x = max_y = 10 ** 6
+
+        return (max(min_x, cx - r), max(min_y, cy - r),
+                min(max_x, cx + r), min(max_y, cy + r))
 
     def _resolve_dynamic_region(self, context):
         use_last_pos = self.config.get_bool("region_use_last_pos", True)

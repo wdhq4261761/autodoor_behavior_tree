@@ -13,15 +13,42 @@ class ImageProcessor:
     # 模板哈希缓存：{(模板phash, hash_type): 模板哈希值}
     _template_hash_cache: Dict[str, str] = {}
 
+    # 判「是否具备可定位结构」的边缘能量阈值。
+    # 实测参考：纯色块 0.00，真实截图纯色区 1.28（压缩噪声所致），
+    # 色块+边界 17.37，细腻纹理 38.00。取 3.0 可稳定区分。
+    MIN_EDGE_ENERGY = 3.0
+
+    @staticmethod
+    def _edge_energy(gray: np.ndarray) -> float:
+        """Sobel 梯度均值，衡量区域是否具备可供模板定位的结构。
+
+        比标准差更可靠：截图里的纯色区域因压缩噪声 std 可达 5 以上，
+        但边缘能量只有 1 左右，能正确判定为"无结构"。
+        """
+        if gray.dtype != np.uint8:
+            gray = np.clip(gray, 0, 255).astype(np.uint8)
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        return float(np.mean(np.abs(gx) + np.abs(gy)))
+
     @staticmethod
     def find_template(source: Image.Image, template: Image.Image,
-                      threshold: float = 0.8) -> Tuple[bool, Optional[Tuple[int, int]], float]:
+                      threshold: float = 0.8,
+                      method: str = "sqdiff") -> Tuple[bool, Optional[Tuple[int, int]], float]:
         """模板匹配
+
+        默认使用 TM_SQDIFF_NORMED。不使用 TM_CCOEFF_NORMED 作为默认值的原因：
+        后者的归一化相关系数为 cov(T,I)/(σ_T·σ_I)，当源图局部区域方差 σ_I 为 0
+        （纯色块、纯白对话框、大面积留白）时会出现 0/0，OpenCV 将其置为 1.0，
+        导致整张响应矩阵恒为 1.0、minMaxLoc 取到首个位置 (0,0)，最终返回
+        (0+半宽, 0+半高) 的错误坐标且置信度满分 —— 静默失败且无法用阈值过滤。
 
         Args:
             source: 源图像
             template: 模板图像
-            threshold: 匹配阈值
+            threshold: 匹配阈值（相似度，越大越严格，0~1）
+            method: 匹配算法，"sqdiff"（默认，抗纯色假匹配）
+                    或 "ccoeff"（兼容旧行为，模板为纯色时自动降级为 sqdiff）
 
         Returns:
             (是否找到, 中心位置, 最高置信度) 元组。源图小于模板时返回 (False, None, 0.0)
@@ -49,16 +76,217 @@ class ImageProcessor:
         source_gray = cv2.cvtColor(source_array, cv2.COLOR_RGB2GRAY)
         template_gray = cv2.cvtColor(template_array, cv2.COLOR_RGB2GRAY)
 
-        result = cv2.matchTemplate(source_gray, template_gray, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        # CCOEFF 在纯色模板上无意义（σ_T=0 同样触发 0/0），强制降级
+        use_method = method
+        if use_method == "ccoeff" and float(np.std(template_gray)) < 1.0:
+            use_method = "sqdiff"
 
-        if max_val >= threshold:
+        # CCOEFF 在纯色源区域会把响应矩阵塌缩为常数（≈1.0），结果不可信，
+        # 检出退化后同样降级为 SQDIFF 重算；未退化时直接复用这次的响应矩阵
+        ccoeff_result = None
+        if use_method == "ccoeff":
+            probe = cv2.matchTemplate(source_gray, template_gray, cv2.TM_CCOEFF_NORMED)
+            if float(probe.max() - probe.min()) < 1e-5:
+                use_method = "sqdiff"
+            else:
+                ccoeff_result = probe
+
+        if use_method == "ccoeff":
+            _, max_val, _, max_loc = cv2.minMaxLoc(ccoeff_result)
+            confidence = float(max_val)
+            best_loc = max_loc
+        else:
+            # 定位用 SQDIFF：数值稳定，不会在纯色区域出现 0/0 塌缩。
+            result = cv2.matchTemplate(source_gray, template_gray, cv2.TM_SQDIFF_NORMED)
+            _, _, min_loc, _ = cv2.minMaxLoc(result)
+            best_loc = min_loc
+
+            # 评分用局部 Pearson 相关：SQDIFF 只反映灰度差，纯色画面可能因
+            # 灰度恰好接近而拿到 0.90+ 的高分（实测纯青底可达 0.906），
+            # 必须用结构相关性复核；Pearson 对线性亮度变化免疫，语义与
+            # CCOEFF 一致，但不依赖全图归一化，因此不会塌缩。
             h, w = template_gray.shape
-            center_x = max_loc[0] + w // 2
-            center_y = max_loc[1] + h // 2
-            return True, (center_x, center_y), max_val
+            bx, by = best_loc
+            patch = source_gray[by:by + h, bx:bx + w]
+            template_f = template_gray.astype(np.float64)
 
-        return False, None, max_val
+            # 先判「有没有可定位的结构」。std 不可靠：真实截图的纯色区域
+            # 因压缩噪声 std 可达 5.14，却毫无边界；改用边缘能量，实测
+            # 纯色区 1.28、色块边界 17.37，区分明显。
+            if ImageProcessor._edge_energy(template_gray) < ImageProcessor.MIN_EDGE_ENERGY:
+                # 模板本身无结构，模板匹配无法定位，交由颜色检测处理
+                confidence = 0.0
+            elif ImageProcessor._edge_energy(patch) < ImageProcessor.MIN_EDGE_ENERGY:
+                # 源区域无结构，与有结构的模板不可能匹配
+                confidence = 0.0
+            else:
+                corr = float(np.corrcoef(
+                    patch.astype(np.float64).ravel(),
+                    template_f.ravel(),
+                )[0, 1])
+                confidence = max(0.0, min(1.0, corr))
+
+        if confidence >= threshold:
+            h, w = template_gray.shape
+            center_x = best_loc[0] + w // 2
+            center_y = best_loc[1] + h // 2
+            return True, (center_x, center_y), confidence
+
+        return False, None, confidence
+
+    # ------------------------------------------------------------------
+    # 多尺度匹配
+    # ------------------------------------------------------------------
+    @staticmethod
+    def build_scales(scale_range: Tuple[float, float] = (0.85, 1.15),
+                     steps: int = 5) -> List[float]:
+        """生成等比缩放序列，用于 DPI / 窗口尺寸变化时的模板适配。"""
+        low, high = float(scale_range[0]), float(scale_range[1])
+        if low <= 0 or high <= 0:
+            raise ValueError("scale_range 必须为正数")
+        if low > high:
+            low, high = high, low
+        if steps <= 1:
+            return [1.0]
+
+        span = (high - low) / (steps - 1)
+        scales = [round(low + i * span, 4) for i in range(steps)]
+        # 保证 1.0 在候选内，避免遗漏原始尺寸
+        if not any(abs(s - 1.0) < 1e-6 for s in scales) and low <= 1.0 <= high:
+            scales.append(1.0)
+            scales.sort()
+        return scales
+
+    # ------------------------------------------------------------------
+    # 粗定位精修（级联）
+    # ------------------------------------------------------------------
+    @staticmethod
+    def refine_bbox(source: Image.Image, coarse_bbox, color: Tuple[int, int, int],
+                    expand: float = 3.0, tolerance: int = 50,
+                    min_pixels: int = 8) -> Optional[Tuple[int, int, int, int]]:
+        """用颜色连通域把粗定位框精修为精确 bbox。
+
+        VLM 的 grounding 精度实测只有 20~50 px，且置信度不可靠（会报 1.0
+        却偏 50 px），不能直接用于裁剪或点击。正确做法是级联：
+
+            粗框 ──外扩──► 区域 ──颜色连通域──► 精确 bbox
+
+        外扩倍数很关键：必须保证目标完整落入区域内，否则目标被边界截断，
+        中位数/外接框都会偏向保留侧。实测外扩 3 倍即可把误差从 20~50 px
+        收敛到 0~1 px。
+
+        Args:
+            source: 源图像
+            coarse_bbox: 粗定位框 (x1, y1, x2, y2)，图像内坐标
+            color: 目标主色 (R, G, B)
+            expand: 外扩倍数（相对粗框尺寸）
+            tolerance: 颜色容差
+            min_pixels: 最小连通域面积
+
+        Returns:
+            精确 bbox (x1, y1, x2, y2)，失败返回 None
+        """
+        if not coarse_bbox or len(coarse_bbox) != 4:
+            return None
+        try:
+            x1, y1, x2, y2 = (int(v) for v in coarse_bbox)
+        except (TypeError, ValueError):
+            return None
+
+        cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+        half_w = max(1.0, (x2 - x1) * expand / 2.0)
+        half_h = max(1.0, (y2 - y1) * expand / 2.0)
+
+        rx1 = max(0, int(cx - half_w))
+        ry1 = max(0, int(cy - half_h))
+        rx2 = min(source.width, int(cx + half_w))
+        ry2 = min(source.height, int(cy + half_h))
+        if rx2 <= rx1 or ry2 <= ry1:
+            return None
+
+        region = np.array(source.crop((rx1, ry1, rx2, ry2)))
+        if region.size == 0:
+            return None
+
+        lower = np.array([max(0, c - tolerance) for c in color])
+        upper = np.array([min(255, c + tolerance) for c in color])
+        mask = cv2.inRange(region[:, :, :3], lower, upper)
+
+        count, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
+        if count <= 1:
+            return None
+
+        # 取面积最大的连通域（排除零星噪点）
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        best = 1 + int(np.argmax(areas))
+        if int(stats[best, cv2.CC_STAT_AREA]) < min_pixels:
+            return None
+
+        bx = int(stats[best, cv2.CC_STAT_LEFT])
+        by = int(stats[best, cv2.CC_STAT_TOP])
+        bw = int(stats[best, cv2.CC_STAT_WIDTH])
+        bh = int(stats[best, cv2.CC_STAT_HEIGHT])
+
+        return (rx1 + bx, ry1 + by, rx1 + bx + bw, ry1 + by + bh)
+
+    @staticmethod
+    def find_template_scaled(source: Image.Image, template: Image.Image,
+                             threshold: float = 0.8,
+                             method: str = "sqdiff",
+                             scales: Optional[List[float]] = None
+                             ) -> Tuple[bool, Optional[Tuple[int, int]], float, float]:
+        """多尺度模板匹配。
+
+        ``cv2.matchTemplate`` 是单尺度的：模板与目标的像素尺寸必须严格一致，
+        一旦 DPI 变化或窗口缩放就失效。本方法对模板做等比缩放后逐一尝试，
+        取置信度最高者。
+
+        代价：每个尺度一次完整匹配，耗时与尺度数成正比。仅在确实存在
+        缩放场景时启用（``ImageConditionNode`` 的 ``multi_scale`` 开关）。
+
+        Args:
+            source: 源图像
+            template: 模板图像
+            threshold: 匹配阈值
+            method: "sqdiff"（默认）/ "ccoeff"
+            scales: 缩放比列表，None 或空表示单尺度（等价于 find_template）
+
+        Returns:
+            (是否找到, 中心位置, 置信度, 最佳缩放比)
+        """
+        if not scales:
+            found, pos, conf = ImageProcessor.find_template(
+                source, template, threshold, method
+            )
+            return found, pos, conf, 1.0
+
+        best_pos: Optional[Tuple[int, int]] = None
+        best_conf = -1.0
+        best_scale = 1.0
+        found_any = False
+
+        for scale in scales:
+            if abs(scale - 1.0) < 1e-6:
+                scaled = template
+            else:
+                width = max(1, int(round(template.width * scale)))
+                height = max(1, int(round(template.height * scale)))
+                if width > source.width or height > source.height:
+                    continue
+                scaled = template.resize((width, height), Image.LANCZOS)
+
+            found, pos, conf = ImageProcessor.find_template(
+                source, scaled, threshold, method
+            )
+            if conf > best_conf:
+                best_conf = conf
+                best_pos = pos
+                best_scale = scale
+                found_any = found
+
+        if best_conf < 0:
+            return False, None, 0.0, 1.0
+        return found_any, best_pos, max(0.0, best_conf), best_scale
 
     @staticmethod
     def find_color(source: Image.Image, target_color: Tuple[int, int, int],
