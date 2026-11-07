@@ -1,0 +1,10 @@
+{
+    "name": "vlm_vision",
+    "display_name": "VLM 语义视觉",
+    "version": "1.0.0",
+    "author": "AutoDoor Team",
+    "description": "按需调用多模态模型做语义级感知：自然语言定位目标、是非断言、字段读取。默认不参与主回路，受 phash 缓存与单次运行预算闸约束，失败显式返回而非静默通过",
+    "category": "vision",
+    "entry": "main.py",
+    "class": "VLMVisionPlugin"
+}

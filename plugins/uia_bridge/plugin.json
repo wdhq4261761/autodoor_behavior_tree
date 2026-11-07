@@ -1,0 +1,10 @@
+{
+    "name": "uia_bridge",
+    "display_name": "UIA 控件桥",
+    "version": "1.0.0",
+    "author": "AutoDoor Team",
+    "description": "制作期接入 Windows UIA 控件树，把控件位置物化为屏幕坐标与客户区相对坐标；运行期由内置鼠标节点直接点击，不再依赖 UIA。适用于 Win32/WinForms 与开启 accessibility 的 Chromium 应用",
+    "category": "vision",
+    "entry": "main.py",
+    "class": "UIABridgePlugin"
+}
