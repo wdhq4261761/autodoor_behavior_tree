@@ -468,9 +468,10 @@ class BehaviorTreeApp(ctk.CTk):
         import traceback
         try:
             import bt_plugins
+            from bt_utils.resource_manager import get_user_plugin_dir
             builtin_dir = os.path.join(os.path.dirname(bt_plugins.__file__), 'builtin')
-            # 用户插件目录（项目根目录下的 plugins/）
-            user_plugin_dir = os.path.join(os.getcwd(), 'plugins')
+            # 用户插件目录（打包版 = exe 同级 plugins/，开发版 = 项目根 plugins/）
+            user_plugin_dir = get_user_plugin_dir()
 
             plugin_context = PluginContext(settings=self._settings)
             self._plugin_loader = PluginLoader(plugin_context)

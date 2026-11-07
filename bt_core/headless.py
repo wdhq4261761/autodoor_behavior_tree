@@ -176,14 +176,15 @@ class HeadlessRunner:
 
             # 扫描内置插件目录
             import os
-            builtin_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bt_plugins", "builtin")
+            from bt_utils.resource_manager import get_builtin_plugins_dir, get_user_plugin_dir
+            builtin_dir = get_builtin_plugins_dir()
             if os.path.isdir(builtin_dir):
                 for info in self._plugin_loader.scan(builtin_dir):
                     plugin_dir = os.path.join(builtin_dir, info.name)
                     self._plugin_loader.load_plugin(plugin_dir)
 
-            # 扫描用户插件目录
-            user_dir = os.path.join(os.getcwd(), "plugins")
+            # 扫描用户插件目录（打包版落在 exe 同级，不依赖 cwd）
+            user_dir = get_user_plugin_dir()
             if os.path.isdir(user_dir):
                 for info in self._plugin_loader.scan(user_dir):
                     plugin_dir = os.path.join(user_dir, info.name)

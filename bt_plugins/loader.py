@@ -133,6 +133,22 @@ class PluginLoader:
                 print(f"[PluginLoader] 入口文件不存在: {entry_path}")
                 return False
 
+            # 插件内部普遍使用绝对包导入，例如：
+            #     from plugins.vlm_vision.nodes import VLMLocateNode
+            # 开发版之所以能用，是因为 cwd 恰好是项目根且被加入 sys.path；
+            # 打包成 exe 后 cwd 是 exe 目录、且不在 sys.path 中，
+            # 于是报 "No module named 'plugins'"。
+            # 这里显式把 "plugins 所在目录的上一级" 加入 sys.path，
+            # 使 plugins 作为命名空间包（PEP 420，无需 __init__.py）可被解析，
+            # 开发版与打包版行为一致。
+            try:
+                _plugins_root = os.path.dirname(os.path.abspath(plugin_dir))
+                _import_root = os.path.dirname(_plugins_root)
+                if _import_root and _import_root not in sys.path:
+                    sys.path.insert(0, _import_root)
+            except Exception:
+                pass
+
             # 动态导入模块（spec_from_file_location 按文件路径加载，不依赖 sys.path）
             module_name = f"bt_plugin_{name}"
             try:

@@ -110,17 +110,19 @@ class LogManager:
     
     @classmethod
     def _get_log_dir(cls) -> str:
-        """获取日志目录（项目根目录/logs）
+        """获取日志目录（应用主目录/logs）
 
-        日志统一保存在项目根目录下的 logs 文件夹中，
+        日志统一保存在应用主目录下的 logs 文件夹中，
         实时日志与历史日志共用同一套逻辑（时间戳文件）。
         目录创建失败时回退当前目录。
+
+        注意：这里必须用 get_app_home() 而不是 __file__ 推算。
+        打包后 __file__ 位于 _internal/ 内，用它会写进只读的安装目录，
+        既导致用户找不到日志，也会在覆盖升级时被清空。
         """
         try:
-            # 项目根目录 = 本文件所在目录的上一级（bt_utils -> 项目根）
-            project_root = os.path.dirname(
-                os.path.dirname(os.path.abspath(__file__)))
-            log_dir = os.path.join(project_root, "logs")
+            from bt_utils.resource_manager import get_app_home
+            log_dir = os.path.join(get_app_home(), "logs")
             os.makedirs(log_dir, exist_ok=True)
             return log_dir
         except Exception:

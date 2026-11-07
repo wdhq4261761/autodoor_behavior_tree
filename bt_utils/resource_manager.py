@@ -31,6 +31,46 @@ def get_resource_path(relative_path: str) -> str:
     return os.path.join(app_root, relative_path)
 
 
+def get_app_home() -> str:
+    """获取应用主目录（可写区域）
+
+    与 get_app_root() 的区别：
+    - get_app_root() 在打包后指向 _internal，是随包分发的只读安装内容；
+    - 本函数在打包后指向 exe 所在目录，适合放用户可编辑的内容（插件、配置、素材）。
+
+    若不区分这两者，打包版把插件写进 _internal，用户既看不到也改不了，
+    且升级覆盖安装时会被清空。
+
+    Returns:
+        应用主目录
+    """
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def get_builtin_plugins_dir() -> str:
+    """内置插件目录（随包分发，只读）"""
+    return os.path.join(get_app_root(), "bt_plugins", "builtin")
+
+
+def get_user_plugin_dir() -> str:
+    """用户插件目录（可写）
+
+    解析顺序：
+    1. 环境变量 AUTODOOR_PLUGINS_DIR（便于多实例 / CI 隔离）
+    2. 应用主目录下的 plugins/
+
+    打包版务必落在 exe 同级，而不是依赖 os.getcwd()——
+    用户从任意目录双击或通过快捷方式启动时，cwd 并非 exe 所在目录，
+    用 cwd 会导致插件「莫名消失」。
+    """
+    env_dir = os.environ.get("AUTODOOR_PLUGINS_DIR")
+    if env_dir:
+        return os.path.abspath(env_dir)
+    return os.path.join(get_app_home(), "plugins")
+
+
 @singleton
 class ResourceManager:
     DEFAULT_ALARM_SOUND = "assets/sounds/alarm.mp3"
