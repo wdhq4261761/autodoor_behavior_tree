@@ -57,7 +57,7 @@
 | 节点类型                  | 功能      | 关键参数                                                                          |
 | --------------------- | ------- | ----------------------------------------------------------------------------- |
 | OCRConditionNode      | OCR识别文字 | region, keywords, language, preprocess\_mode（默认/复杂色彩/自适应/自动调优）                |
-| ImageConditionNode    | 图像匹配    | region, template\_path, threshold（匹配阈值%，默认80）                                 |
+| ImageConditionNode    | 图像匹配    | region, template\_path, threshold（匹配阈值%，默认80）, multi\_scale（多尺度开关）, scale\_range（默认 `0.85,1.15`）, scale\_steps（默认5） |
 | ColorConditionNode    | 颜色检测    | region, target\_color（#RRGGBB）, tolerance（容差，默认30）, min\_pixels               |
 | NumberConditionNode   | 数字比较    | region, extract\_mode, compare\_mode（>/\</>=/<=/==/!=）, threshold, value\_key |
 | VariableConditionNode | 变量判断    | variable\_name, operator（>/\</==/!=/contains等）, target\_value                 |
@@ -86,6 +86,38 @@
 | TextInputNode   | 文本输入 | input\_mode（preset/file/extract）, text\_content, file\_path, position                                               |
 
 ***
+
+### 插件节点（V2.0.0 起）
+
+**命名规则：插件节点的 NodeType 必须写成 `{插件名}.{节点类型}`，否则加载时报「节点类型未知」。**
+
+树文件中的写法：
+
+```json
+{ "id": "n7", "type": "math_expressions.ExpressionNode",
+  "config": { "expression_x": "move_x = gx - 960" } }
+```
+
+常用插件节点（完整清单用 `plugin nodes` 命令或 `autodoor_list_plugins` 工具查询）：
+
+| NodeType | 功能 | 关键参数 |
+| --- | --- | --- |
+| `math_expressions.ExpressionNode` | 读黑板变量做四则运算并写回 | expression\_x / expression\_y，格式 `结果变量 = 算式` |
+| `math_expressions.ClickHereNode` | 在鼠标当前位置点击，不需坐标 | click\_button, press\_duration\_ms |
+| `uia_bridge.UIASampleNode` | 读控件树取控件矩形 | hwnd / window\_title, control\_name, control\_type, output\_mode（client/screen） |
+| `uia_bridge.UIAStateNode` | 判断控件存在/启用/可见 | control\_name, expect（exists/enabled/disabled/visible） |
+| `vlm_vision.VLMLocateNode` | 自然语言定位目标，返回坐标 | question, position\_key, fallback\_color |
+| `vlm_vision.VLMAssertNode` | 语义是非判断 | question, expect（yes/no） |
+| `vlm_vision.VLMReadNode` | 读取画面字段文本 | question, write\_to |
+| `yolo_vision.YoloDetectNode` | YOLO 目标检测 | 模型路径, 置信度阈值 |
+| `file_processor.FileReadNode` / `FileWriteNode` / `FileMoveNode` | 文件读写与移动 | file\_path, target\_key / source\_key |
+
+**选型建议**
+
+- 需要「用两个坐标算出偏移量」时，不要试图用内置节点拼凑，直接用 `ExpressionNode`
+- 目标有明确文字时优先 `OCRConditionNode`；有稳定外观时用 `ImageConditionNode`；只有颜色特征时用 `ColorConditionNode`
+- `VLM*` 节点用于制作期或低频断言，**不要放进高频循环**（带调用上限，超限会返回失败）
+- `UIASampleNode` 用于制作期取准坐标，运行期仍用内置鼠标节点点击
 
 ## 组合逻辑
 
