@@ -396,6 +396,54 @@ build.bat
 
 ***
 
+## 🤖 DSH 集成（AI Agent 驱动）
+
+本项目配套一个独立的 DSH（DeepSeek Harness）集成仓库，把 AutoDoor 的能力封装为 **12 个模型工具**，
+可以在 Agent 对话里用自然语言驱动桌面自动化：
+
+> 🔗 **配套仓库**：<https://github.com/wdhq4261761/autodoor-dsh-integration>（公开）
+>
+> `dsh_integration\` 目录**不在**本仓库的版本控制内（独立仓库管理），clone 本仓库拿不到 DSH 工具集，请从上面的配套仓库获取。
+
+```
+用户(GUI 对话) → DSH Agent(LLM 工具编排) → 12 个 autodoor_* 工具
+              → 源码版: venv python cli.py / 打包版: autodoor-cli.exe
+              → AutoDoor 引擎(OCR / 视觉 / 键鼠) → 桌面自动化
+```
+
+### 12 个工具概览
+
+| 分类 | 工具 |
+| --- | --- |
+| 能力发现 | `autodoor_list_plugins` / `autodoor_list_nodes` |
+| 设计与落盘 | `autodoor_generate` / `autodoor_save_structure` / `autodoor_create_plugin` |
+| 素材制作 | `autodoor_assets_add` / `autodoor_assets_verify` |
+| 运行与观测 | `autodoor_validate` / `autodoor_run` / `autodoor_status` / `autodoor_read_log` / `autodoor_stop` |
+
+### 快速使用
+
+```bat
+:: 1. clone 两个仓库
+git clone https://github.com/wdhq4261761/autodoor_behavior_tree.git
+git clone https://github.com/wdhq4261761/autodoor-dsh-integration.git
+
+:: 2. 把预设复制到 DSH 用户目录（假设 DSH 已安装）
+xcopy /E /Y autodoor-dsh-integration\autodoor_preset\* "%USERPROFILE%\.dsh\.agent-presets\autodoor\"
+
+:: 3. 设置 AutoDoor 根目录（源码版指项目根；打包版指 exe 所在目录），新开进程生效
+setx AUTODOOR_ROOT "D:\workspace\autodoor_behavior_tree"
+
+:: 4. 在 DSH profile 中注册预设后，新建会话选择「AutoDoor 自动化」即可
+```
+
+> 预设插件按「`AUTODOOR_CLI` → `<AUTODOOR_ROOT>\autodoor-cli.exe` → 源码版 venv」的顺序自动适配，
+> 源码版与免安装打包版都可用；打包版必须用 `autodoor-cli.exe`（图形版无 stdout）。
+>
+> **纯净 PC 从零部署**请看配套仓库里的 [`docs/部署手册-AI-Agent执行版.md`](https://github.com/wdhq4261761/autodoor-dsh-integration/blob/master/docs/部署手册-AI-Agent执行版.md)——
+> 面向 AI Agent 的可机读步骤（S1–S8，带成功判据与失败分支），人类可当核对清单用。
+
+***
+
 ## 🔌 扩展开发
 
 ### 添加自定义节点
