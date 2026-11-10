@@ -138,7 +138,7 @@ def _cmd_select(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {plan_path}")
 
     try:
-        with open(plan_path, "r", encoding="utf-8") as f:
+        with open(plan_path, "r", encoding="utf-8-sig") as f:
             plan = json.load(f)
     except json.JSONDecodeError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: plan.json 解析失败: {e}")
@@ -190,7 +190,7 @@ def _cmd_scan(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {structure_path}")
 
     try:
-        with open(structure_path, "r", encoding="utf-8") as f:
+        with open(structure_path, "r", encoding="utf-8-sig") as f:
             structure = json.load(f)
     except json.JSONDecodeError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: structure.json 解析失败: {e}")
@@ -207,7 +207,7 @@ def _cmd_scan(args):
     task_context = ""
     if os.path.exists(plan_path):
         try:
-            with open(plan_path, "r", encoding="utf-8") as f:
+            with open(plan_path, "r", encoding="utf-8-sig") as f:
                 plan = json.load(f)
                 task_context = plan.get("task_summary", "")
         except (json.JSONDecodeError, OSError):
@@ -248,7 +248,7 @@ def _cmd_generate(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {structure_path}")
 
     try:
-        with open(structure_path, "r", encoding="utf-8") as f:
+        with open(structure_path, "r", encoding="utf-8-sig") as f:
             structure = json.load(f)
     except json.JSONDecodeError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: structure.json 解析失败: {e}")
@@ -293,7 +293,7 @@ def _cmd_validate(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {tree_path}")
 
     try:
-        with open(tree_path, "r", encoding="utf-8") as f:
+        with open(tree_path, "r", encoding="utf-8-sig") as f:
             tree_data = json.load(f)
     except json.JSONDecodeError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: tree.json 解析失败: {e}")
@@ -382,7 +382,7 @@ def _cmd_refine(args):
     plan_path = os.path.join(os.path.dirname(tree_path), "plan.json")
     if os.path.exists(plan_path):
         try:
-            with open(plan_path, "r", encoding="utf-8") as f:
+            with open(plan_path, "r", encoding="utf-8-sig") as f:
                 plan = json.load(f)
                 task_context = plan.get("task_summary", "")
         except (json.JSONDecodeError, OSError):

@@ -65,7 +65,7 @@ class HeadlessRunner:
         # 若先反序列化再加载插件，树里的插件节点会被无声丢弃且照常"跑成功"。
         self._load_plugins(settings)
 
-        with open(tree_file, 'r', encoding='utf-8') as f:
+        with open(tree_file, 'r', encoding='utf-8-sig') as f:
             tree_data = json.load(f)
 
         result = Serializer.deserialize(tree_data)

@@ -200,19 +200,19 @@ class Serializer:
         ext = os.path.splitext(filepath)[1].lower()
 
         if ext == ".json":
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
             return Serializer.deserialize(data)
         elif ext in (".yaml", ".yml"):
             try:
                 import yaml
-                with open(filepath, 'r', encoding='utf-8') as f:
+                with open(filepath, 'r', encoding='utf-8-sig') as f:
                     data = yaml.safe_load(f)
                 return Serializer.deserialize(data)
             except ImportError:
                 raise ImportError("PyYAML is required for YAML format")
         elif ext in (".txt", ".bt"):
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
                 text = f.read()
             node = Serializer._from_text_format(text)
             return node, {}, {}
