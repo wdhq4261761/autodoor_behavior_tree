@@ -50,8 +50,8 @@ class VLMAnalyzer:
         if not fill_requests:
             return []
 
-        # 编码截图
-        image_base64 = self._encode_image(screenshot_path)
+        # 编码截图（自动识别真实格式，避免 JPEG/BMP 被误传为 png 导致解码失败）
+        image_mime, image_base64 = self._encode_image(screenshot_path)
 
         # 构建 prompt
         system_prompt = self._load_prompt()
@@ -62,33 +62,46 @@ class VLMAnalyzer:
             f"[VLM] 配置: base_url={self._vlm.base_url} | model={self._vlm.model}"
         )
         self._debug(f"[VLM] 待填充参数数={len(fill_requests)} | 截图={screenshot_path}")
-        self._debug(f"[VLM] 图片大小={len(image_base64)}字符 | user_prompt={user_prompt[:200]}")
+        self._debug(
+            f"[VLM] 图片大小={len(image_base64)}字符(mime={image_mime}) | "
+            f"user_prompt={user_prompt[:200]}"
+        )
 
         try:
             result = self._vlm.chat_with_image(
                 text_prompt=user_prompt,
                 image_base64=image_base64,
-                image_detail="high",
+                image_mime=image_mime,
                 system_prompt=system_prompt,
             )
         except Exception as e:
             self._debug(f"[VLM] 请求失败: {e}")
             raise VLMAnalysisError(f"VLM 请求失败: {e}") from e
 
-        self._debug(f"[VLM] 请求成功，原始返回内容: {result['content'][:300]}")
+        self._debug(f"[VLM] 请求成功，原始返回内容: {(result.get('content') or '')[:300]}")
+
+        raw_content = (result.get("content") or "").strip()
+        if not raw_content:
+            self._debug("[VLM] 返回内容为空")
+            raise VLMAnalysisError(
+                "VLM 返回内容为空：当前模型可能不支持图片输入，"
+                "或回复被服务端过滤。请确认 VLM 配置的模型具备视觉能力，"
+                "并检查 API Key 权限与 base_url 是否正确。"
+            )
+
         try:
-            data = json.loads(result["content"])
+            data = self._parse_json_object(raw_content)
         except json.JSONDecodeError as e:
             self._debug(f"[VLM] JSON 解析失败: {e}")
             raise VLMAnalysisError(
-                f"VLM 返回的 JSON 无效: {e}\n原始内容: {result['content'][:500]}"
+                f"VLM 返回的 JSON 无效: {e}\n原始内容: {raw_content[:500]}"
             ) from e
 
         if not isinstance(data, dict):
             self._debug(f"[VLM] JSON 顶层非对象: {type(data).__name__}")
             raise VLMAnalysisError(
                 f"VLM 返回的 JSON 应为对象，实际为 {type(data).__name__}: "
-                f"{result['content'][:500]}"
+                f"{raw_content[:500]}"
             )
 
         suggestions = data.get("suggestions", [])
@@ -147,17 +160,54 @@ class VLMAnalyzer:
                 })
         return requests
 
-    def _encode_image(self, image_path: str) -> str:
-        """将图片编码为 base64
+    def _encode_image(self, image_path: str):
+        """将图片编码为 base64，并探测真实 MIME 类型
+
+        Returns:
+            (mime_type, base64_string) 元组
 
         Raises:
             VLMAnalysisError: 文件读取失败
         """
         try:
             with open(image_path, "rb") as f:
-                return base64.b64encode(f.read()).decode("utf-8")
+                head = f.read(16)
+                data = f.read()
         except (FileNotFoundError, IOError) as e:
             raise VLMAnalysisError(f"无法读取截图文件: {image_path}: {e}") from e
+
+        mime = self._detect_mime(head)
+        return mime, base64.b64encode(data).decode("utf-8")
+
+    @staticmethod
+    def _detect_mime(head: bytes) -> str:
+        """根据文件头魔数识别图片 MIME 类型，未识别时回退 png"""
+        if head.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if head.startswith(b"\x89PNG\r\n\x1a\n"):
+            return "image/png"
+        if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+            return "image/webp"
+        if head[:2] == b"BM":
+            return "image/bmp"
+        return "image/png"
+
+    @staticmethod
+    def _parse_json_object(text: str) -> Any:
+        """解析模型返回的 JSON；容忍前后夹杂说明文字（如 ```json 围栏已剥离、
+        模型在对象前后附加解释性文本等场景）"""
+        content = (text or "").strip()
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            pass
+        # 提取第一个 { 到最后一个 } 之间的内容再次尝试
+        start = content.find("{")
+        end = content.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = content[start:end + 1]
+            return json.loads(candidate)
+        raise json.JSONDecodeError("未找到有效的 JSON 对象", content, 0)
 
     def _build_user_prompt(self, fill_requests: List[Dict[str, Any]],
                            task_context: str) -> str:
@@ -184,3 +234,4 @@ class VLMAnalyzer:
                 print(message, flush=True)
             except Exception:
                 pass
+
