@@ -1,16 +1,30 @@
 import os
+from unittest.mock import patch
 
 from PIL import Image
 
-from bt_gui.bt_editor.thumbnail import load_thumbnail, resolve_resource_path
+from bt_gui.bt_editor.thumbnail import (
+    DEFAULT_MAX_SIZE,
+    load_thumbnail,
+    resolve_resource_path,
+)
 
 
 def test_load_thumbnail_scales_down(tmp_path):
     src = tmp_path / "a.png"
     Image.new("RGB", (400, 200), "red").save(src)
-    img, size = load_thumbnail(str(src), max_size=(232, 140))
+    img, size = load_thumbnail(str(src), max_size=DEFAULT_MAX_SIZE)
     assert img is not None
-    assert size[0] <= 232 and size[1] <= 140
+    assert size[0] <= DEFAULT_MAX_SIZE[0] and size[1] <= DEFAULT_MAX_SIZE[1]
+    assert size == (220, 110)
+
+
+def test_load_thumbnail_default_max_size(tmp_path):
+    src = tmp_path / "a.png"
+    Image.new("RGB", (400, 200), "red").save(src)
+    img, size = load_thumbnail(str(src))
+    assert img is not None
+    assert size == (220, 110)
 
 
 def test_load_thumbnail_missing_returns_none(tmp_path):
@@ -22,10 +36,15 @@ def test_resolve_relative_resource(tmp_path):
         os.path.join(str(tmp_path), "images", "a.png"))
 
 
+def test_resolve_relative_without_project_root():
+    assert resolve_resource_path("./a.png") == os.path.abspath(
+        os.path.join(".", "a.png"))
+
+
 def test_load_thumbnail_does_not_upscale(tmp_path):
     src = tmp_path / "small.png"
     Image.new("RGB", (100, 50), "blue").save(src)
-    img, size = load_thumbnail(str(src), max_size=(232, 140))
+    img, size = load_thumbnail(str(src))
     assert img is not None
     assert size == (100, 50)
 
@@ -36,10 +55,33 @@ def test_load_thumbnail_corrupt_returns_none(tmp_path):
     assert load_thumbnail(str(src)) == (None, None)
 
 
+class _FakeZeroSizeImage:
+    size = (0, 0)
+
+    def load(self):
+        pass
+
+    def convert(self, mode):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def test_load_thumbnail_zero_size(tmp_path):
+    src = tmp_path / "zero.png"
+    src.write_bytes(b"placeholder")
+    with patch("bt_gui.bt_editor.thumbnail.Image.open", return_value=_FakeZeroSizeImage()):
+        assert load_thumbnail(str(src)) == (None, None)
+
+
 def test_load_thumbnail_rgba(tmp_path):
     src = tmp_path / "alpha.png"
     Image.new("RGBA", (300, 300), (255, 0, 0, 128)).save(src)
-    img, size = load_thumbnail(str(src), max_size=(232, 140))
+    img, size = load_thumbnail(str(src))
     assert img is not None
     assert img.mode == "RGBA"
     assert size == (140, 140)

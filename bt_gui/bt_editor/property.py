@@ -2820,6 +2820,9 @@ class PropertyPanel(ctk.CTkFrame):
         Args:
             node_data: 新节点的数据
         """
+        # 丢弃上一节点尚未创建的异步区块，避免用旧 config 覆盖新内容
+        self._async_load_queue.clear()
+
         config_data = node_data.get("config", {})
 
         # 更新基本信息字段
@@ -2865,6 +2868,8 @@ class PropertyPanel(ctk.CTkFrame):
         self._hidden_values.clear()
         self._async_load_queue.clear()
         self._last_node_type = None
+        self._thumbnail_image = None
+        self._thumbnail_path = ""
     
     def save_and_clear(self):
         self.current_node_id = None
@@ -3017,7 +3022,7 @@ class PropertyPanel(ctk.CTkFrame):
         self.view_image_btn.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_sm']))
         self.view_image_btn.pack_forget()
 
-    def _create_thumbnail_section(self, node_type: str, config: Dict[str, Any]):
+    def _create_thumbnail_section(self, _node_type: str, config: Dict[str, Any]):
         self._create_section_title("模板预览")
 
         frame = ctk.CTkFrame(
@@ -3029,19 +3034,23 @@ class PropertyPanel(ctk.CTkFrame):
 
         self._thumbnail_frame = frame
         # CTkLabel 无法用 image=None 清除旧图，使用 1x1 透明图占位
-        self._thumbnail_placeholder = ctk.CTkImage(
-            light_image=Image.new("RGBA", (1, 1), (0, 0, 0, 0)),
-            size=(1, 1),
-        )
+        if getattr(self, "_thumbnail_placeholder", None) is None:
+            self._thumbnail_placeholder = ctk.CTkImage(
+                light_image=Image.new("RGBA", (1, 1), (0, 0, 0, 0)),
+                size=(1, 1),
+            )
         self._thumbnail_label = ctk.CTkLabel(
             frame,
             text="未选择模板图片",
             font=Theme.get_font('xs'),
             text_color=self._dark_colors['text_muted'],
-            height=Theme.DIMENSIONS.get('thumbnail_height', 140),
+            height=Theme.DIMENSIONS['thumbnail_height'],
             cursor="hand2",
         )
-        self._thumbnail_label.pack(padx=8, pady=8)
+        self._thumbnail_label.pack(
+            padx=Theme.DIMENSIONS['spacing_sm'],
+            pady=Theme.DIMENSIONS['spacing_sm'],
+        )
         self._thumbnail_label.bind("<Button-1>", lambda e: self._open_thumbnail_file())
         self._thumbnail_path = ""
         self._refresh_thumbnail(config.get("template_path", ""))
