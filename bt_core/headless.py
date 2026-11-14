@@ -9,6 +9,7 @@ import asyncio
 from typing import Optional
 
 from bt_adapters.adapter_manager import AdapterManager
+from bt_utils.json_io import load_json
 
 
 class HeadlessRunner:
@@ -53,7 +54,6 @@ class HeadlessRunner:
         Raises:
             Exception: 加载或运行失败时抛出异常（不返回 False）
         """
-        import json
         from bt_core.serializer import Serializer
         from bt_core.context import ExecutionContext
         from bt_core.engine import BehaviorTreeEngine
@@ -72,8 +72,7 @@ class HeadlessRunner:
         # 若先反序列化再加载插件，树里的插件节点会被无声丢弃且照常"跑成功"。
         self._load_plugins(settings)
 
-        with open(tree_file, 'r', encoding='utf-8-sig') as f:
-            tree_data = json.load(f)
+        tree_data = load_json(tree_file)
 
         if check_preflight:
             from bt_core.preflight import validate_tree_data

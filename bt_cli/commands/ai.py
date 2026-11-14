@@ -5,6 +5,7 @@ import os
 import json
 
 from bt_cli.errors import exit_with_code, EXIT_CONFIG_ERROR, EXIT_GENERIC_ERROR
+from bt_utils.json_io import load_json
 
 
 def cmd_ai(args):
@@ -138,9 +139,8 @@ def _cmd_select(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {plan_path}")
 
     try:
-        with open(plan_path, "r", encoding="utf-8-sig") as f:
-            plan = json.load(f)
-    except json.JSONDecodeError as e:
+        plan = load_json(plan_path)
+    except ValueError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: plan.json 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
@@ -190,9 +190,8 @@ def _cmd_scan(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {structure_path}")
 
     try:
-        with open(structure_path, "r", encoding="utf-8-sig") as f:
-            structure = json.load(f)
-    except json.JSONDecodeError as e:
+        structure = load_json(structure_path)
+    except ValueError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: structure.json 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
@@ -207,10 +206,9 @@ def _cmd_scan(args):
     task_context = ""
     if os.path.exists(plan_path):
         try:
-            with open(plan_path, "r", encoding="utf-8-sig") as f:
-                plan = json.load(f)
-                task_context = plan.get("task_summary", "")
-        except (json.JSONDecodeError, OSError):
+            plan = load_json(plan_path)
+            task_context = plan.get("task_summary", "")
+        except (ValueError, OSError):
             pass  # task_context 是可选的，读取失败不阻断流程
 
     print("VLM 正在分析截图...")
@@ -248,9 +246,8 @@ def _cmd_generate(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {structure_path}")
 
     try:
-        with open(structure_path, "r", encoding="utf-8-sig") as f:
-            structure = json.load(f)
-    except json.JSONDecodeError as e:
+        structure = load_json(structure_path)
+    except ValueError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: structure.json 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
@@ -293,9 +290,8 @@ def _cmd_validate(args):
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 文件不存在: {tree_path}")
 
     try:
-        with open(tree_path, "r", encoding="utf-8-sig") as f:
-            tree_data = json.load(f)
-    except json.JSONDecodeError as e:
+        tree_data = load_json(tree_path)
+    except ValueError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: tree.json 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
@@ -382,10 +378,9 @@ def _cmd_refine(args):
     plan_path = os.path.join(os.path.dirname(tree_path), "plan.json")
     if os.path.exists(plan_path):
         try:
-            with open(plan_path, "r", encoding="utf-8-sig") as f:
-                plan = json.load(f)
-                task_context = plan.get("task_summary", "")
-        except (json.JSONDecodeError, OSError):
+            plan = load_json(plan_path)
+            task_context = plan.get("task_summary", "")
+        except (ValueError, OSError):
             pass
 
     from bt_cli.ai.iteration_engine import IterationEngine
@@ -393,7 +388,7 @@ def _cmd_refine(args):
     engine = IterationEngine()
     try:
         result = engine.iterate(tree_path, max_rounds=max_rounds, task_context=task_context)
-    except (json.JSONDecodeError, OSError) as e:
+    except (ValueError, OSError) as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"读取或解析行为树失败: {e}")
 
     if result["success"]:
@@ -546,7 +541,7 @@ def _cmd_create(args):
             try:
                 result = engine.iterate(tree_path, max_rounds=max_rounds,
                                         task_context=plan.get("task_summary", ""))
-            except (json.JSONDecodeError, OSError) as e:
+            except (ValueError, OSError) as e:
                 exit_with_code(EXIT_CONFIG_ERROR, f"读取或解析行为树失败: {e}")
             if result["success"]:
                 print(f"\n迭代成功！最终行为树: {tree_path}")

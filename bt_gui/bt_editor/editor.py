@@ -21,6 +21,7 @@ from .undo_redo import (
 from .gui_tab_manager import GuiTabManager
 from .tab_bar import TabBar
 from bt_utils.log_manager import LogManager
+from bt_utils.json_io import load_json
 from bt_core.engine import BehaviorTreeEngine
 from bt_core.context import ExecutionContext
 from bt_core.serializer import Serializer
@@ -431,8 +432,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             return
         
         try:
-            with open(tree_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data = load_json(tree_file)
             instance.canvas.load_tree(data)
             instance.file_path = tree_file
         except Exception as e:
@@ -1243,8 +1243,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             return
         
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data = load_json(file_path)
             
             if not skip_clear:
                 self.clear_canvas()
@@ -1309,11 +1308,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         Args:
             script_path: 旧脚本文件路径
         """
-        import json
-        
         try:
-            with open(script_path, 'r', encoding='utf-8') as f:
-                script_data = json.load(f)
+            script_data = load_json(script_path)
             
             script_dir = os.path.dirname(script_path)
             

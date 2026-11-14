@@ -12,6 +12,8 @@
 import os
 import json
 
+from bt_utils.json_io import load_json
+
 
 class ProjectConstants:
     """项目命名与路径的单一权威源常量类。
@@ -87,11 +89,10 @@ def get_app_version() -> str:
     )
     if os.path.exists(build_info_path):
         try:
-            with open(build_info_path, 'r', encoding='utf-8') as f:
-                build_info = json.load(f)
-                version = build_info.get('version', '').strip()
-                if version:
-                    return version
-        except (json.JSONDecodeError, OSError):
+            build_info = load_json(build_info_path)
+            version = build_info.get('version', '').strip()
+            if version:
+                return version
+        except (ValueError, OSError):
             pass
     return '1.0.0'

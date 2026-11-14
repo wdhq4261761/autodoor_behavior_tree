@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox
 from ..theme import Theme
 from .constants import CONDITION_NODES, ACTION_NODES, COMPOSITE_NODES, INTERFACE_NODES
 from bt_utils.log_manager import LogManager
+from bt_utils.json_io import load_json
 
 
 def _subtree_dirs_identical(src_dir: str, dst_dir: str) -> bool:
@@ -3388,8 +3389,7 @@ class PropertyPanel(ctk.CTkFrame):
             return
 
         try:
-            with open(param_file, "r", encoding="utf-8") as f:
-                aut_params = json.load(f)
+            aut_params = load_json(param_file)
         except Exception:
             return
 

@@ -7,6 +7,7 @@ import time
 from .status import NodeStatus
 from .config import NodeConfig
 from bt_utils.helpers import get_random_interval
+from bt_utils.json_io import load_json
 from bt_utils.log_manager import LogManager
 
 if TYPE_CHECKING:
@@ -1771,9 +1772,7 @@ class SubtreeNode(CompositeNode):
         project_json = os.path.join(project_dir, "project.json")
         if os.path.exists(project_json):
             try:
-                with open(project_json, 'r', encoding='utf-8') as f:
-                    import json
-                    proj_data = json.load(f)
+                proj_data = load_json(project_json)
                 main_tree = proj_data.get("main_tree", "tree.json")
                 tree_path = os.path.join(project_dir, main_tree)
                 if os.path.exists(tree_path):
@@ -1812,9 +1811,7 @@ class SubtreeNode(CompositeNode):
             if not os.path.exists(project_json):
                 return False, None
 
-            with open(project_json, 'r', encoding='utf-8') as f:
-                import json as _json
-                proj_data = _json.load(f)
+            proj_data = load_json(project_json)
 
             if proj_data.get("encrypted") and proj_data.get("aut_file"):
                 aut_path = os.path.join(project_dir, proj_data["aut_file"])

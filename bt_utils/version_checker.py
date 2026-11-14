@@ -9,6 +9,7 @@ from tkinter import ttk, messagebox
 import webbrowser
 from datetime import datetime
 from typing import Optional, Dict, Any
+from bt_utils.json_io import load_json
 from bt_utils.log_manager import LogManager
 
 
@@ -25,8 +26,7 @@ def load_build_info():
     
     if os.path.exists(build_info_file):
         try:
-            with open(build_info_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return load_json(build_info_file)
         except Exception:
             pass
     
@@ -191,9 +191,8 @@ class VersionChecker:
         try:
             config_file = self._get_config_file_path()
             if os.path.exists(config_file):
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    return config.get('update', {}).get('ignored_version')
+                config = load_json(config_file)
+                return config.get('update', {}).get('ignored_version')
         except Exception as e:
             LogManager.debug_print(f"加载已忽略版本失败: {str(e)}")
         return None
@@ -203,9 +202,8 @@ class VersionChecker:
         try:
             config_file = self._get_config_file_path()
             if os.path.exists(config_file):
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    return config.get('update', {}).get('force_update_cache', {})
+                config = load_json(config_file)
+                return config.get('update', {}).get('force_update_cache', {})
         except Exception as e:
             LogManager.debug_print(f"加载强制更新缓存失败: {str(e)}")
         return {}
@@ -217,9 +215,8 @@ class VersionChecker:
             
             if os.path.exists(config_file):
                 try:
-                    with open(config_file, 'r', encoding='utf-8') as f:
-                        config = json.load(f)
-                except json.JSONDecodeError:
+                    config = load_json(config_file)
+                except ValueError:
                     config = {}
             else:
                 config = {}
@@ -598,9 +595,8 @@ class VersionChecker:
             
             if os.path.exists(config_file):
                 try:
-                    with open(config_file, 'r', encoding='utf-8') as f:
-                        config = json.load(f)
-                except json.JSONDecodeError:
+                    config = load_json(config_file)
+                except ValueError:
                     config = {}
             else:
                 config = {}

@@ -1,0 +1,46 @@
+import json
+
+import pytest
+
+from bt_utils.json_io import load_json, save_json
+
+
+def test_load_json_with_bom(tmp_path):
+    p = tmp_path / "bom.json"
+    p.write_bytes(b"\xef\xbb\xbf" + json.dumps({"name": "行为树"}, ensure_ascii=False).encode("utf-8"))
+    assert load_json(p) == {"name": "行为树"}
+
+
+def test_load_json_without_bom(tmp_path):
+    p = tmp_path / "plain.json"
+    p.write_text('{"ok": true}', encoding="utf-8")
+    assert load_json(p) == {"ok": True}
+
+
+def test_load_json_missing_returns_default(tmp_path):
+    assert load_json(tmp_path / "none.json", default={"x": 1}) == {"x": 1}
+
+
+def test_load_json_missing_without_default_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_json(tmp_path / "none.json")
+
+
+def test_load_json_invalid_raises(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text("{", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_json(p)
+
+
+def test_save_json_roundtrip(tmp_path):
+    p = tmp_path / "out.json"
+    save_json(p, {"k": "中文"})
+    assert load_json(p)["k"] == "中文"
+
+
+def test_save_json_creates_parent_dirs(tmp_path):
+    p = tmp_path / "a" / "b" / "out.json"
+    save_json(p, {"k": "中文"})
+    assert p.exists()
+    assert json.loads(p.read_text(encoding="utf-8"))["k"] == "中文"

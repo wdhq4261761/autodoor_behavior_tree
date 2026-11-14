@@ -7,6 +7,8 @@ import signal
 import threading
 from datetime import datetime
 
+from bt_utils.json_io import load_json
+
 
 DAEMON_PID_FILE = os.path.join(os.path.expanduser("~"), ".autodoor_bt", "daemon.pid")
 DAEMON_STATUS_FILE = os.path.join(os.path.expanduser("~"), ".autodoor_bt", "daemon_status.json")
@@ -90,8 +92,7 @@ def _show_status():
         return
 
     try:
-        with open(DAEMON_STATUS_FILE, "r", encoding="utf-8") as f:
-            status = json.load(f)
+        status = load_json(DAEMON_STATUS_FILE)
         print(f"守护进程状态:")
         print(f"  PID: {status.get('pid', 'N/A')}")
         print(f"  启动时间: {status.get('start_time', 'N/A')}")

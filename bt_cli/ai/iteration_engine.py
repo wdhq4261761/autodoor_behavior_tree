@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional
 
 from bt_cli.ai.llm_client import LLMClient
 from bt_cli.ai.resource_path import get_resource_path, get_cli_path
+from bt_utils.json_io import load_json
 
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -245,8 +246,7 @@ class IterationEngine:
         Returns:
             {"success", "rounds", "final_tree", "reports"}
         """
-        with open(tree_path, "r", encoding="utf-8") as f:
-            tree_data = json.load(f)
+        tree_data = load_json(tree_path)
 
         # 备份原始文件，便于异常时手动恢复
         backup_path = tree_path + ".bak"

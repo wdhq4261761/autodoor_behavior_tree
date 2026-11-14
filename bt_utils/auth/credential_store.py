@@ -3,6 +3,7 @@ import os
 import time
 from typing import Optional, Dict, Any
 
+from bt_utils.json_io import load_json
 from bt_utils.log_manager import LogManager
 
 
@@ -56,9 +57,8 @@ class CredentialStore:
         file_path = self._get_file_path()
         if os.path.exists(file_path):
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError):
+                return load_json(file_path)
+            except (ValueError, IOError):
                 return {}
         return {}
 

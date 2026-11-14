@@ -97,6 +97,7 @@ except Exception as e:
 write_log("Importing json and logging...")
 import json
 import logging
+from bt_utils.json_io import load_json
 write_log("json and logging imported successfully")
 
 def get_resource_path(relative_path):
@@ -111,9 +112,8 @@ def load_version():
     
     if os.path.exists(build_info_file):
         try:
-            with open(build_info_file, 'r', encoding='utf-8') as f:
-                build_info = json.load(f)
-                return build_info.get('version', '0.0.0')
+            build_info = load_json(build_info_file)
+            return build_info.get('version', '0.0.0')
         except Exception:
             pass
     
@@ -125,10 +125,9 @@ def load_github_info():
     
     if os.path.exists(build_info_file):
         try:
-            with open(build_info_file, 'r', encoding='utf-8') as f:
-                build_info = json.load(f)
-                github = build_info.get('github', {})
-                return github.get('owner', 'wdhq4261761'), github.get('repo', 'autodoor_behavior_tree')
+            build_info = load_json(build_info_file)
+            github = build_info.get('github', {})
+            return github.get('owner', 'wdhq4261761'), github.get('repo', 'autodoor_behavior_tree')
         except Exception:
             pass
     

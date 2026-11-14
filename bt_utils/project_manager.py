@@ -4,6 +4,7 @@ import shutil
 from datetime import datetime
 from typing import Dict, Any
 from bt_utils.path_resolver import PathResolver
+from bt_utils.json_io import load_json
 from bt_utils.resource_importer import ResourceImporter
 from bt_core.constants import ProjectConstants, get_app_version
 
@@ -48,10 +49,9 @@ class ProjectManager:
         meta_path = os.path.join(project_root, ProjectConstants.PROJECT_META_FILE)
         if os.path.exists(meta_path):
             try:
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    meta = json.load(f)
+                meta = load_json(meta_path)
                 return meta.get("project_info", {}).get("name", "").strip()
-            except (json.JSONDecodeError, OSError):
+            except (ValueError, OSError):
                 pass
         return ""
 
@@ -68,10 +68,9 @@ class ProjectManager:
         meta_path = os.path.join(project_root, ProjectConstants.PROJECT_META_FILE)
         if os.path.exists(meta_path):
             try:
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    meta = json.load(f)
+                meta = load_json(meta_path)
                 return meta.get("project_info", {})
-            except (json.JSONDecodeError, OSError):
+            except (ValueError, OSError):
                 pass
         return {}
 
@@ -114,8 +113,7 @@ class ProjectManager:
         if not os.path.exists(meta_path):
             return False
         try:
-            with open(meta_path, 'r', encoding='utf-8') as f:
-                meta = json.load(f)
+            meta = load_json(meta_path)
             if "project_info" not in meta:
                 meta["project_info"] = {}
             meta["project_info"]["name"] = new_name
@@ -123,7 +121,7 @@ class ProjectManager:
             with open(meta_path, 'w', encoding='utf-8') as f:
                 json.dump(meta, f, indent=2, ensure_ascii=False)
             return True
-        except (json.JSONDecodeError, OSError):
+        except (ValueError, OSError):
             return False
 
     def create_project(self, name: str, description: str = "") -> None:
@@ -179,8 +177,7 @@ class ProjectManager:
         if not os.path.exists(project_file):
             raise FileNotFoundError(f"项目配置文件不存在: {project_file}")
 
-        with open(project_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        return load_json(project_file)
 
     def save_project(self, tree_data: Dict[str, Any]) -> None:
         """
