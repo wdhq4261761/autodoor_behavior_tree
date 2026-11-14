@@ -12,7 +12,7 @@ from .registry import NodeRegistry
 # 节点类型 -> (config 中的资源路径键, 资源中文描述)
 _RESOURCE_KEYS: Dict[str, tuple] = {
     "ImageConditionNode": ("template_path", "模板图片"),
-    "SubtreeNode": ("subtree_path", "子树文件"),
+    "SubtreeNode": ("subtree_path", "子树项目文件夹"),
     "ScriptNode": ("script_path", "脚本文件"),
     "TextInputNode": ("file_path", "输入文件"),
 }
@@ -56,12 +56,12 @@ class PreflightReport:
 
 
 def _resolve_resource_path(path: str, project_root: Optional[str]) -> str:
-    """按约定解析资源路径"""
-    if path.startswith("./") and project_root:
-        return os.path.normpath(os.path.join(project_root, path))
+    """按约定解析资源路径（支持 ~ 展开，并统一规范化）"""
+    path = os.path.expanduser(path)
     if os.path.isabs(path):
-        return path
+        return os.path.normpath(path)
     if project_root:
+        project_root = os.path.expanduser(project_root)
         return os.path.normpath(os.path.join(project_root, path))
     return os.path.abspath(path)
 
@@ -89,16 +89,20 @@ def validate_tree_data(tree_data: Any,
         return report
 
     root_id = tree_data.get("root_node")
-    if not root_id or root_id not in nodes:
-        report.add("error", "ROOT_MISSING", f"根节点无效: {root_id}", node_id=root_id)
-        return report
+    root_valid = isinstance(root_id, str) and root_id in nodes
+    if not root_valid:
+        report.add(
+            "error", "ROOT_MISSING", f"根节点无效: {root_id}",
+            node_id=root_id if isinstance(root_id, str) else None,
+        )
 
     connections = tree_data.get("connections")
     if not isinstance(connections, list):
         connections = []
 
     children: Dict[str, List[str]] = {node_id: [] for node_id in nodes}
-    parent_counts: Dict[str, int] = {node_id: 0 for node_id in nodes}
+    parents: Dict[str, List[str]] = {node_id: [] for node_id in nodes}
+    seen_pairs = set()
 
     for conn in connections:
         if not isinstance(conn, dict):
@@ -106,6 +110,12 @@ def validate_tree_data(tree_data: Any,
             continue
         parent_id = conn.get("parent_id")
         child_id = conn.get("child_id")
+        if not isinstance(parent_id, str) or not isinstance(child_id, str):
+            report.add(
+                "error", "BAD_CONNECTION",
+                f"连线端点 id 无效: {parent_id} -> {child_id}",
+            )
+            continue
         if parent_id not in nodes or child_id not in nodes:
             node_id = parent_id if parent_id in nodes else child_id
             report.add(
@@ -114,23 +124,29 @@ def validate_tree_data(tree_data: Any,
                 node_id=node_id if node_id in nodes else None,
             )
             continue
+        pair = (parent_id, child_id)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
         children[parent_id].append(child_id)
-        parent_counts[child_id] += 1
+        parents[child_id].append(parent_id)
 
-    for node_id, count in parent_counts.items():
-        if count > 1:
+    for node_id, parent_list in parents.items():
+        if len(parent_list) > 1:
             report.add(
                 "error", "MULTI_PARENT",
-                f"节点被 {count} 个父节点引用",
+                f"节点被多个父节点引用: {', '.join(parent_list)}",
                 node_id=node_id,
             )
 
     for node_id, node_data in nodes.items():
         node_type = node_data.get("type") if isinstance(node_data, dict) else None
-        if not node_type or NodeRegistry.get(node_type) is None:
+        if not isinstance(node_type, str) or not node_type \
+                or NodeRegistry.get(node_type) is None:
+            display = node_type if isinstance(node_type, str) and node_type else "（缺失）"
             report.add(
                 "error", "UNKNOWN_NODE_TYPE",
-                f"未知节点类型: {node_type or '（缺失）'}",
+                f"未知节点类型: {display}（若为插件节点，请确认插件已加载）",
                 node_id=node_id,
             )
             continue
@@ -151,7 +167,12 @@ def validate_tree_data(tree_data: Any,
                 node_id=node_id,
             )
             continue
-        if not os.path.exists(_resolve_resource_path(path, project_root)):
+        resolved = _resolve_resource_path(path, project_root)
+        if node_type == "SubtreeNode":
+            exists = os.path.isdir(resolved)
+        else:
+            exists = os.path.exists(resolved)
+        if not exists:
             report.add(
                 "error", "MISSING_RESOURCE",
                 f"{label}不存在: {path}",
@@ -159,36 +180,50 @@ def validate_tree_data(tree_data: Any,
             )
 
     _check_cycles(nodes, children, report)
-    _check_reachable(root_id, nodes, children, report)
+    if root_valid:
+        _check_reachable(root_id, nodes, children, report)
 
     return report
 
 
 def _check_cycles(nodes: Dict[str, Any], children: Dict[str, List[str]],
                   report: PreflightReport) -> None:
-    """三色 DFS 检测环"""
+    """三色 DFS 检测环（显式栈迭代，避免深树递归爆栈）"""
     white, gray, black = 0, 1, 2
     colors = {node_id: white for node_id in nodes}
-    path: List[str] = []
 
-    def dfs(node_id: str) -> bool:
-        colors[node_id] = gray
-        path.append(node_id)
-        for child_id in children.get(node_id, []):
-            if colors[child_id] == gray:
-                start = path.index(child_id)
-                cycle = " -> ".join(path[start:] + [child_id])
-                report.add("error", "CYCLE", f"检测到循环引用: {cycle}", node_id=child_id)
-                return True
-            if colors[child_id] == white and dfs(child_id):
-                return True
-        path.pop()
-        colors[node_id] = black
-        return False
-
-    for node_id in nodes:
-        if colors[node_id] == white and dfs(node_id):
-            return
+    for start_id in nodes:
+        if colors[start_id] != white:
+            continue
+        colors[start_id] = gray
+        path: List[str] = [start_id]
+        stack = [(start_id, iter(children.get(start_id, [])))]
+        while stack:
+            node_id, child_iter = stack[-1]
+            advanced = False
+            for child_id in child_iter:
+                child_color = colors.get(child_id, white)
+                if child_color == gray:
+                    start = path.index(child_id)
+                    cycle = " -> ".join(
+                        str(item) for item in path[start:] + [child_id]
+                    )
+                    report.add(
+                        "error", "CYCLE",
+                        f"检测到循环引用: {cycle}",
+                        node_id=child_id,
+                    )
+                    return
+                if child_color == white:
+                    colors[child_id] = gray
+                    path.append(child_id)
+                    stack.append((child_id, iter(children.get(child_id, []))))
+                    advanced = True
+                    break
+            if not advanced:
+                stack.pop()
+                colors[node_id] = black
+                path.pop()
 
 
 def _check_reachable(root_id: str, nodes: Dict[str, Any],

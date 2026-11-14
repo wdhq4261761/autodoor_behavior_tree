@@ -243,3 +243,202 @@ def test_plugin_node_not_reported_as_unknown():
         assert "UNKNOWN_NODE_TYPE" not in _codes(report)
     finally:
         NodeRegistry.unregister("demo.PluginNode")
+
+
+# ---------------------------------------------------------------------------
+# 深树 / 环检测
+# ---------------------------------------------------------------------------
+
+def _chain_tree(length):
+    """构造 start -> n1 -> ... -> n{length-1} 的链式树"""
+    nodes = {"start": _node("SequenceNode")}
+    connections = []
+    previous = "start"
+    for index in range(1, length):
+        node_id = f"n{index}"
+        nodes[node_id] = _node("SequenceNode")
+        connections.append(_conn(previous, node_id))
+        previous = node_id
+    return _tree(nodes, connections, root_node="start")
+
+
+def test_deep_chain_no_recursion_error():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_chain_tree(1500))
+
+    assert "CYCLE" not in _codes(report)
+
+
+def test_self_cycle_reports_cycle():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree(
+        {"a": _node("SequenceNode")},
+        [_conn("a", "a")],
+        root_node="a",
+    ))
+
+    assert "CYCLE" in _codes(report)
+
+
+def test_cycle_message_contains_full_path_and_is_reported_once():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree(
+        {"a": _node("SequenceNode"), "b": _node("SequenceNode")},
+        [_conn("a", "b"), _conn("b", "a")],
+        root_node="a",
+    ))
+
+    cycles = [i for i in report.issues if i.code == "CYCLE"]
+    assert len(cycles) == 1
+    assert "a -> b -> a" in cycles[0].message
+
+
+# ---------------------------------------------------------------------------
+# 脏数据类型
+# ---------------------------------------------------------------------------
+
+def test_root_list_does_not_raise_and_reports_root_missing():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree({"root": _node("SequenceNode")}, root_node=[]))
+
+    assert "ROOT_MISSING" in _codes(report)
+
+
+def test_node_type_dict_reports_unknown_without_raise():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree({"root": {"type": {}, "config": {}}}))
+
+    assert "UNKNOWN_NODE_TYPE" in _codes(report)
+
+
+def test_connection_endpoint_list_does_not_raise():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree(
+        {"root": _node("SequenceNode")},
+        [{"parent_id": ["x"], "child_id": "root"}],
+    ))
+
+    bad = [i for i in report.issues if i.code == "BAD_CONNECTION"]
+    assert bad and bad[0].node_id is None
+
+
+def test_tree_data_empty_dict_does_not_raise():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data({})
+
+    assert "EMPTY_TREE" in _codes(report)
+
+
+def test_connections_none_does_not_raise():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data({
+        "root_node": "root",
+        "nodes": {"root": _node("SequenceNode")},
+        "connections": None,
+    })
+
+    assert isinstance(report.issues, list)
+    assert "BAD_CONNECTION" not in _codes(report)
+
+
+def test_node_value_none_does_not_raise():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree({"root": None}))
+
+    assert "UNKNOWN_NODE_TYPE" in _codes(report)
+
+
+# ---------------------------------------------------------------------------
+# 连线去重 / 多父
+# ---------------------------------------------------------------------------
+
+def test_duplicate_connection_not_reported_as_multi_parent():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree(
+        {"root": _node("SequenceNode"), "a": _node("SequenceNode")},
+        [_conn("root", "a"), _conn("root", "a")],
+    ))
+
+    assert "MULTI_PARENT" not in _codes(report)
+
+
+def test_multi_parent_message_lists_parent_ids():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree(
+        {
+            "root": _node("SequenceNode"),
+            "a": _node("SequenceNode"),
+            "b": _node("SequenceNode"),
+            "c": _node("SequenceNode"),
+        },
+        [
+            _conn("root", "a"),
+            _conn("root", "b"),
+            _conn("a", "c"),
+            _conn("b", "c"),
+        ],
+    ))
+
+    multi = [i for i in report.issues if i.code == "MULTI_PARENT"]
+    assert multi and multi[0].node_id == "c"
+    assert "a" in multi[0].message
+    assert "b" in multi[0].message
+
+
+# ---------------------------------------------------------------------------
+# SubtreeNode 指向项目文件夹
+# ---------------------------------------------------------------------------
+
+def test_subtree_path_to_file_reports_missing(tmp_path):
+    from bt_core.preflight import validate_tree_data
+
+    (tmp_path / "tree.json").write_text("{}", encoding="utf-8")
+
+    report = validate_tree_data(
+        _tree({"root": _node("SubtreeNode", {"subtree_path": "./tree.json"})}),
+        project_root=str(tmp_path),
+    )
+
+    missing = [i for i in report.issues if i.code == "MISSING_RESOURCE"]
+    assert missing and "子树项目文件夹" in missing[0].message
+
+
+def test_subtree_path_to_directory_passes(tmp_path):
+    from bt_core.preflight import validate_tree_data
+
+    (tmp_path / "sub").mkdir()
+
+    report = validate_tree_data(
+        _tree({"root": _node("SubtreeNode", {"subtree_path": "./sub"})}),
+        project_root=str(tmp_path),
+    )
+
+    assert "MISSING_RESOURCE" not in _codes(report)
+
+
+# ---------------------------------------------------------------------------
+# 根节点缺失时仍做其余检查
+# ---------------------------------------------------------------------------
+
+def test_root_missing_still_checks_node_types():
+    from bt_core.preflight import validate_tree_data
+
+    report = validate_tree_data(_tree(
+        {"root": _node("NoSuchNode")},
+        root_node="ghost",
+    ))
+
+    assert "ROOT_MISSING" in _codes(report)
+    assert "UNKNOWN_NODE_TYPE" in _codes(report)
+    assert "UNREACHABLE" not in _codes(report)
