@@ -6,6 +6,7 @@
 - 尺寸接近时不重复设置；
 - restore_window_size=False 时不还原也不改写记录。
 """
+import builtins
 from unittest.mock import MagicMock, patch
 
 from bt_core.nodes import StartNode
@@ -25,6 +26,20 @@ def test_parse_window_size_invalid_returns_none():
     assert WindowManager.parse_window_size("0x720") is None
 
 
+def test_size_helpers_return_safe_defaults_without_win32gui():
+    real_import = builtins.__import__
+
+    def _import_without_win32gui(name, *args, **kwargs):
+        if name == "win32gui":
+            raise ImportError("win32gui unavailable")
+        return real_import(name, *args, **kwargs)
+
+    with patch("builtins.__import__", side_effect=_import_without_win32gui):
+        assert WindowManager.get_window_size(1) is None
+        assert WindowManager.set_window_size(1, (800, 600)) is False
+        assert WindowManager.is_maximized(1) is False
+
+
 def test_start_node_records_size_when_missing():
     node = StartNode(config=None)
     node.config.set("bind_window", True)
@@ -32,9 +47,10 @@ def test_start_node_records_size_when_missing():
     ctx = MagicMock()
     with patch("bt_utils.window_manager.WindowManager.find_window_smart_with_hwnd", return_value=(100, "title")), \
          patch("bt_utils.window_manager.WindowManager.get_window_size", return_value=(800, 600)), \
-         patch("bt_utils.window_manager.WindowManager.is_maximized", return_value=False):
+         patch("bt_utils.window_manager.WindowManager.is_maximized", return_value=True):
         node._bind_window_to_context(ctx)
     assert node.config.get("window_size") == "800x600"
+    assert node.config.get("window_maximized") is True
 
 
 def test_start_node_restores_size_when_recorded():
@@ -45,6 +61,20 @@ def test_start_node_restores_size_when_recorded():
     ctx = MagicMock()
     with patch("bt_utils.window_manager.WindowManager.find_window_smart_with_hwnd", return_value=(100, "title")), \
          patch("bt_utils.window_manager.WindowManager.get_window_size", return_value=(900, 700)), \
+         patch("bt_utils.window_manager.WindowManager.set_window_size", return_value=True) as setter, \
+         patch("bt_utils.window_manager.WindowManager.is_maximized", return_value=False):
+        node._bind_window_to_context(ctx)
+    setter.assert_called_once_with(100, (1024, 768))
+
+
+def test_restore_triggered_when_one_dimension_exceeds_tolerance():
+    node = StartNode(config=None)
+    node.config.set("bind_window", True)
+    node.config.set("window_title", "Notepad")
+    node.config.set("window_size", "1024x768")
+    ctx = MagicMock()
+    with patch("bt_utils.window_manager.WindowManager.find_window_smart_with_hwnd", return_value=(100, "title")), \
+         patch("bt_utils.window_manager.WindowManager.get_window_size", return_value=(1027, 768)), \
          patch("bt_utils.window_manager.WindowManager.set_window_size", return_value=True) as setter, \
          patch("bt_utils.window_manager.WindowManager.is_maximized", return_value=False):
         node._bind_window_to_context(ctx)

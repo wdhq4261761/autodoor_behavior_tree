@@ -293,8 +293,8 @@ class WindowManager:
 
     @staticmethod
     def get_window_size(hwnd: int):
-        import win32gui
         try:
+            import win32gui
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
             return (right - left, bottom - top)
         except Exception:
@@ -302,8 +302,8 @@ class WindowManager:
 
     @staticmethod
     def set_window_size(hwnd: int, size) -> bool:
-        import win32gui
         try:
+            import win32gui
             left, top, _, _ = win32gui.GetWindowRect(hwnd)
             win32gui.SetWindowPos(hwnd, None, left, top, int(size[0]), int(size[1]),
                                   0x0002 | 0x0004 | 0x0010)  # SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE
@@ -313,8 +313,8 @@ class WindowManager:
 
     @staticmethod
     def is_maximized(hwnd: int) -> bool:
-        import win32gui
         try:
+            import win32gui
             return bool(win32gui.IsZoomed(hwnd))
         except Exception:
             return False
