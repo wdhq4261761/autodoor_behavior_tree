@@ -165,14 +165,22 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             instance.canvas.show_all_status_indicators()
         
         tree_data = instance.canvas.get_tree_data() if instance.canvas else {}
+        if not tree_data or not tree_data.get("nodes"):
+            messagebox.showwarning("警告", "行为树为空，无法运行")
+            return False
+
         from bt_core.preflight import validate_tree_data
         report = validate_tree_data(tree_data, instance.project_root)
         if report.issues:
             lines = report.format_lines()
             detail = "\n".join(lines[:12])
+            if len(lines) > 12:
+                detail += f"\n…（其余 {len(lines) - 12} 条已省略）"
             if report.has_errors:
-                from tkinter import messagebox
-                if not messagebox.askyesno("运行前检查", detail + "\n\n发现错误，仍要继续运行吗？"):
+                if not messagebox.askyesno(
+                        "运行前检查",
+                        detail + "\n\n发现错误，仍要继续运行吗？",
+                        default="no"):
                     return False
             else:
                 LogManager.debug_print("[Preflight] " + "；".join(lines[:5]))
@@ -184,7 +192,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             root_node = result
         
         if not root_node:
-            from tkinter import messagebox
             messagebox.showwarning("警告", "行为树为空，无法运行")
             return False
         

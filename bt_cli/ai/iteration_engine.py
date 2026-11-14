@@ -109,11 +109,13 @@ class IterationEngine:
                 buf = io.StringIO()
                 with contextlib.redirect_stdout(buf):
                     runner = HeadlessRunner()
-                    runner.run(tree_path, project=None)
+                    code = runner.run(tree_path, project=None)
                 output = buf.getvalue()
                 if output:
                     logs.extend(output.split("\n"))
-                success = True
+                if code == 2:
+                    logs.append("预检未通过，试运行未执行")
+                success = (code == 0)
             except Exception as e:
                 exception = e
                 logs.append(f"运行错误: {e}")

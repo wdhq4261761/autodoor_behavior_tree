@@ -352,7 +352,9 @@ def main():
     args = parse_args()
 
     if args.headless:
-        run_headless(args.headless, args.project)
+        code = run_headless(args.headless, args.project)
+        if code:
+            sys.exit(code)
         return
 
     ensure_workspace_exists()
