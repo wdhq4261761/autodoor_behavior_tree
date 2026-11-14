@@ -88,12 +88,12 @@ class PackageImporter:
                     if basename == "project.json":
                         try:
                             with zipf.open(name) as f:
-                                project_config = json.load(f)
+                                project_config = json.loads(f.read().decode("utf-8-sig"))
                                 project_info = project_config.get("project_info", {})
                                 name_val = project_info.get("name", "").strip()
                                 if name_val:
                                     return name_val
-                        except (json.JSONDecodeError, OSError):
+                        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
                             pass
                         break
 

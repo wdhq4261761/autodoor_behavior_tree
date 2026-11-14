@@ -65,3 +65,17 @@ def test_save_json_writes_without_bom(tmp_path):
     p = tmp_path / "out.json"
     save_json(p, {"k": "中文"})
     assert not p.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_package_import_reads_bom_project_json(tmp_path):
+    import zipfile
+
+    from bt_utils.package_importer import PackageImporter
+
+    zip_path = tmp_path / "pkg.zip"
+    payload = b"\xef\xbb\xbf" + json.dumps(
+        {"project_info": {"name": "带BOM项目"}}, ensure_ascii=False
+    ).encode("utf-8")
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("src/project.json", payload)
+    assert PackageImporter().get_project_name(str(zip_path)) == "带BOM项目"
