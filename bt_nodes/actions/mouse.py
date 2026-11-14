@@ -374,6 +374,9 @@ class MouseMoveNode(ActionNode):
                     break
                 
                 time.sleep(total_duration_sec / steps)
+
+            # 插值按整数取整 + 随机抖动会累计误差，最终落点必须精确对齐
+            context.execute_mouse_move(end_pos, relative=False, x_float=0, y_float=0)
         else:
             context.execute_mouse_move(end_pos, relative=False,
                                        x_float=self.x_float, y_float=self.y_float)
@@ -437,6 +440,9 @@ class MouseMoveNode(ActionNode):
                     break
                 
                 time.sleep(total_duration_sec / steps)
+
+            # 插值按整数取整 + 随机抖动会累计误差，最终落点必须精确对齐
+            context.execute_mouse_move(end_pos, relative=False, x_float=0, y_float=0)
         else:
             context.execute_mouse_move(end_pos, relative=False,
                                        x_float=self.x_float, y_float=self.y_float)
