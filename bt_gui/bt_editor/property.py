@@ -5,6 +5,7 @@ import json
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from PIL import Image
 
 from ..theme import Theme
 from .constants import CONDITION_NODES, ACTION_NODES, COMPOSITE_NODES, INTERFACE_NODES
@@ -2850,6 +2851,9 @@ class PropertyPanel(ctk.CTkFrame):
                 widget.set_value(display_value)
                 self._update_single_field_visibility(key, field)
 
+        if self.current_node_type == "ImageConditionNode":
+            self._refresh_thumbnail(config_data.get("template_path", ""))
+
         self._is_loading = False
 
     def _clear_content(self):
@@ -2922,6 +2926,9 @@ class PropertyPanel(ctk.CTkFrame):
             if node_type == "SubtreeNode" and isinstance(config, dict) and "_aut_parameter_file" in config:
                 async_steps.append(("aut_param", config, None))
 
+            if node_type == "ImageConditionNode":
+                async_steps.append(("thumbnail_section", node_type, node_data.get("config", {})))
+
             if node_type in CONDITION_NODES:
                 async_steps.append(("preview_section", node_type, node_data.get("config", {})))
 
@@ -2966,6 +2973,8 @@ class PropertyPanel(ctk.CTkFrame):
                     self._create_aut_param_section(data)
                 elif step_type == "preview_section":
                     self._create_preview_section(data, extra)
+                elif step_type == "thumbnail_section":
+                    self._create_thumbnail_section(data, extra)
                 elif step_type == "decorator_section":
                     self._create_section_title("装饰参数")
                     self.decorator_fields_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
@@ -3007,7 +3016,66 @@ class PropertyPanel(ctk.CTkFrame):
         self._preview_image_path = None
         self.view_image_btn.pack(side="left", padx=(0, Theme.DIMENSIONS['spacing_sm']))
         self.view_image_btn.pack_forget()
-    
+
+    def _create_thumbnail_section(self, node_type: str, config: Dict[str, Any]):
+        self._create_section_title("模板预览")
+
+        frame = ctk.CTkFrame(
+            self.content_frame,
+            fg_color=self._dark_colors['bg_tertiary'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+        )
+        frame.pack(fill="x", pady=(0, Theme.DIMENSIONS['spacing_sm']))
+
+        self._thumbnail_frame = frame
+        # CTkLabel 无法用 image=None 清除旧图，使用 1x1 透明图占位
+        self._thumbnail_placeholder = ctk.CTkImage(
+            light_image=Image.new("RGBA", (1, 1), (0, 0, 0, 0)),
+            size=(1, 1),
+        )
+        self._thumbnail_label = ctk.CTkLabel(
+            frame,
+            text="未选择模板图片",
+            font=Theme.get_font('xs'),
+            text_color=self._dark_colors['text_muted'],
+            height=Theme.DIMENSIONS.get('thumbnail_height', 140),
+            cursor="hand2",
+        )
+        self._thumbnail_label.pack(padx=8, pady=8)
+        self._thumbnail_label.bind("<Button-1>", lambda e: self._open_thumbnail_file())
+        self._thumbnail_path = ""
+        self._refresh_thumbnail(config.get("template_path", ""))
+
+    def _refresh_thumbnail(self, raw_path: str):
+        label = getattr(self, "_thumbnail_label", None)
+        if label is None or not label.winfo_exists():
+            return
+
+        from .thumbnail import load_thumbnail, resolve_resource_path
+
+        project_root = None
+        if self.app and hasattr(self.app, 'behavior_tree'):
+            project_root = getattr(self.app.behavior_tree, 'project_root', None)
+
+        path = resolve_resource_path(str(raw_path or ""), project_root)
+        self._thumbnail_path = path
+        img, size = load_thumbnail(path)
+        if img is None:
+            self._thumbnail_image = None
+            label.configure(
+                image=self._thumbnail_placeholder,
+                text="未找到模板图片" if raw_path else "未选择模板图片",
+            )
+            return
+
+        ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=size)
+        self._thumbnail_image = ctk_img  # 防 GC
+        label.configure(image=ctk_img, text="")
+
+    def _open_thumbnail_file(self):
+        if self._thumbnail_path and os.path.isfile(self._thumbnail_path):
+            os.startfile(self._thumbnail_path)
+
     def _on_preview_click(self, node_type: str):
         from bt_utils.log_manager import LogManager
 
@@ -3481,6 +3549,9 @@ class PropertyPanel(ctk.CTkFrame):
                 self.on_change(self.current_node_id, set_marker, True)
 
         self._update_dependent_fields_visibility(key)
+
+        if key == "template_path" and self.current_node_type == "ImageConditionNode":
+            self._refresh_thumbnail(value)
     
     def _update_widget_value(self, key: str, value: Any):
         if key in self.widgets:

@@ -96,6 +96,7 @@ class Theme:
         'button_corner_radius': 6,
         'input_height': 32,
         'button_height': 36,
+        'thumbnail_height': 140,
         'spacing_xs': 4,
         'spacing_sm': 8,
         'spacing_md': 12,
