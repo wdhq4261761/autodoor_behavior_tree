@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from .context import ExecutionContext
 
 
+WINDOW_SIZE_TOLERANCE_PX = 2
+
+
 class Node(ABC):
     """节点抽象基类
 
@@ -1492,19 +1495,24 @@ class StartNode(CompositeNode):
                 self.config.set("window_hwnd", hwnd)
 
             restore_size = self.config.get_bool("restore_window_size", True)
-            if restore_size:
-                recorded = WindowManager.parse_window_size(self.config.get("window_size", ""))
-                if recorded:
-                    current = WindowManager.get_window_size(hwnd)
-                    tolerance = 2
-                    if current and (abs(current[0] - recorded[0]) > tolerance or
-                                    abs(current[1] - recorded[1]) > tolerance):
-                        WindowManager.set_window_size(hwnd, recorded)
+            if restore_size and not WindowManager.is_minimized(hwnd):
+                if WindowManager.is_maximized(hwnd):
+                    self.config.set("window_maximized", True)
                 else:
+                    recorded = WindowManager.parse_window_size(self.config.get("window_size", ""))
                     current = WindowManager.get_window_size(hwnd)
-                    if current:
+                    if recorded:
+                        if current and (abs(current[0] - recorded[0]) > WINDOW_SIZE_TOLERANCE_PX or
+                                        abs(current[1] - recorded[1]) > WINDOW_SIZE_TOLERANCE_PX):
+                            if not WindowManager.set_window_size(hwnd, recorded):
+                                LogManager.instance().log_failure(
+                                    node_type="开始节点",
+                                    node_name=self.name,
+                                    reason=f"窗口尺寸还原失败: {WindowManager.format_window_size(recorded)}"
+                                )
+                    elif current:
                         self.config.set("window_size", WindowManager.format_window_size(current))
-                        self.config.set("window_maximized", WindowManager.is_maximized(hwnd))
+                        self.config.set("window_maximized", False)
         else:
             LogManager.instance().log_failure(
                 node_type="开始节点",

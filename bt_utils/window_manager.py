@@ -272,7 +272,7 @@ class WindowManager:
             return False
 
     @staticmethod
-    def parse_window_size(text: str):
+    def parse_window_size(text: str) -> Optional[Tuple[int, int]]:
         if not text:
             return None
         normalized = str(text).lower().replace("×", "x").replace("*", "x").replace(" ", "")
@@ -292,7 +292,7 @@ class WindowManager:
         return f"{int(size[0])}x{int(size[1])}"
 
     @staticmethod
-    def get_window_size(hwnd: int):
+    def get_window_size(hwnd: int) -> Optional[Tuple[int, int]]:
         try:
             import win32gui
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
@@ -314,7 +314,17 @@ class WindowManager:
     @staticmethod
     def is_maximized(hwnd: int) -> bool:
         try:
+            import win32con
             import win32gui
-            return bool(win32gui.IsZoomed(hwnd))
+            return win32gui.GetWindowPlacement(hwnd)[1] == win32con.SW_SHOWMAXIMIZED
+        except Exception:
+            return False
+
+    @staticmethod
+    def is_minimized(hwnd: int) -> bool:
+        try:
+            import win32con
+            import win32gui
+            return win32gui.GetWindowPlacement(hwnd)[1] == win32con.SW_SHOWMINIMIZED
         except Exception:
             return False
