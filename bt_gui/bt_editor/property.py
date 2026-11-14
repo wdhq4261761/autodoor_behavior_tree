@@ -319,6 +319,8 @@ NODE_CONFIG_SCHEMAS = {
     "StartNode": [
         {"key": "bind_window", "label": "绑定窗口", "type": "bool", "default": False},
         {"key": "window_title", "label": "窗口标题", "type": "window_select", "default": "", "hide_if": {"field": "bind_window", "value": False}},
+        {"key": "restore_window_size", "label": "自动还原窗口尺寸", "type": "bool", "default": True, "hide_if": {"field": "bind_window", "value": False}},
+        {"key": "window_size", "label": "窗口尺寸（宽x高）", "type": "text", "default": "", "hide_if": {"field": "bind_window", "value": False}},
         {"key": "window_pid", "label": "窗口PID", "type": "number", "default": 0, "hidden": True},
         {"key": "window_hwnd", "label": "窗口句柄", "type": "number", "default": 0, "hidden": True},
     ],

@@ -1490,6 +1490,21 @@ class StartNode(CompositeNode):
             context.bind_window(hwnd)
             if window_hwnd != hwnd:
                 self.config.set("window_hwnd", hwnd)
+
+            restore_size = self.config.get_bool("restore_window_size", True)
+            if restore_size:
+                recorded = WindowManager.parse_window_size(self.config.get("window_size", ""))
+                if recorded:
+                    current = WindowManager.get_window_size(hwnd)
+                    tolerance = 2
+                    if current and (abs(current[0] - recorded[0]) > tolerance or
+                                    abs(current[1] - recorded[1]) > tolerance):
+                        WindowManager.set_window_size(hwnd, recorded)
+                else:
+                    current = WindowManager.get_window_size(hwnd)
+                    if current:
+                        self.config.set("window_size", WindowManager.format_window_size(current))
+                        self.config.set("window_maximized", WindowManager.is_maximized(hwnd))
         else:
             LogManager.instance().log_failure(
                 node_type="开始节点",

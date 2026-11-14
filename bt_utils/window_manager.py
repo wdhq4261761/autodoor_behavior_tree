@@ -270,3 +270,51 @@ class WindowManager:
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def parse_window_size(text: str):
+        if not text:
+            return None
+        normalized = str(text).lower().replace("×", "x").replace("*", "x").replace(" ", "")
+        parts = normalized.split("x")
+        if len(parts) != 2:
+            return None
+        try:
+            w, h = int(parts[0]), int(parts[1])
+        except ValueError:
+            return None
+        return (w, h) if w > 0 and h > 0 else None
+
+    @staticmethod
+    def format_window_size(size) -> str:
+        if not size:
+            return ""
+        return f"{int(size[0])}x{int(size[1])}"
+
+    @staticmethod
+    def get_window_size(hwnd: int):
+        import win32gui
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            return (right - left, bottom - top)
+        except Exception:
+            return None
+
+    @staticmethod
+    def set_window_size(hwnd: int, size) -> bool:
+        import win32gui
+        try:
+            left, top, _, _ = win32gui.GetWindowRect(hwnd)
+            win32gui.SetWindowPos(hwnd, None, left, top, int(size[0]), int(size[1]),
+                                  0x0002 | 0x0004 | 0x0010)  # SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def is_maximized(hwnd: int) -> bool:
+        import win32gui
+        try:
+            return bool(win32gui.IsZoomed(hwnd))
+        except Exception:
+            return False
