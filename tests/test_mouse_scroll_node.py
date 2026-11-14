@@ -51,6 +51,14 @@ def test_pyautogui_zero_amount_sends_nothing():
     mouse_event.assert_not_called()
 
 
+def test_pyautogui_uses_round_for_non_integer_amount():
+    # distance 在 UI/配置中是整数；这里锁定 int(round()) 的现有行为（2.5 -> 2 格）
+    engine = _make_pyautogui()
+    with mock.patch("pyautogui.scroll") as scroll:
+        engine.mouse_scroll(2.5)
+    scroll.assert_called_once_with(240)
+
+
 # ── IbInputSimulator ──
 
 def _make_ib():
@@ -76,6 +84,14 @@ def test_ib_vertical_scroll_uses_wheel_flags():
     assert len(sent) == 1
     assert sent[0].union.mi.mouseData == 240
     assert sent[0].union.mi.dwFlags == MOUSEEVENTF_WHEEL
+
+
+def test_ib_negative_horizontal_scroll_keeps_sign():
+    engine, sent = _make_ib()
+    engine.mouse_scroll(-2, horizontal=True)
+    assert len(sent) == 1
+    assert sent[0].union.mi.mouseData & 0xFFFFFFFF == 0xFFFFFF10
+    assert sent[0].union.mi.dwFlags == MOUSEEVENTF_HWHEEL
 
 
 # ── 后台消息 ──
@@ -107,6 +123,28 @@ def test_bg_horizontal_scroll_posts_hwheel_message(monkeypatch):
     _, msg, wparam, _ = calls[0]
     assert msg == WM_MOUSEHWHEEL
     assert (wparam >> 16) & 0xFFFF == 240
+
+
+def test_bg_negative_horizontal_scroll_sign_extends_wparam(monkeypatch):
+    engine = _make_bg()
+    calls = []
+
+    def fake_post(hwnd, msg, wparam, lparam):
+        calls.append((hwnd, msg, wparam, lparam))
+        return 1
+
+    def fake_client_to_screen(hwnd, ptr):
+        return 1
+
+    monkeypatch.setattr("bt_utils.bg_input.user32.PostMessageW", fake_post)
+    monkeypatch.setattr("bt_utils.bg_input.user32.ClientToScreen", fake_client_to_screen)
+
+    engine.mouse_scroll(-1, horizontal=True)
+
+    assert len(calls) == 1
+    _, msg, wparam, _ = calls[0]
+    assert msg == WM_MOUSEHWHEEL
+    assert wparam == 0xFF880000  # delta=-120，高 16 位 0xFF88
 
 
 # ── ExecutionContext ──
@@ -154,6 +192,16 @@ def test_execute_mouse_scroll_returns_false_without_engine():
 def test_execute_mouse_scroll_returns_false_on_engine_error():
     ctx = _make_ctx(_FakeEngine(fail=True))
     assert ctx.execute_mouse_scroll(2) is False
+
+
+def test_execute_mouse_scroll_returns_false_when_manager_raises():
+    ctx = ExecutionContext()
+
+    def boom():
+        raise RuntimeError("manager unavailable")
+
+    ctx._get_input_manager = boom
+    assert ctx.execute_mouse_scroll(1) is False
 
 
 # ── MouseScrollNode ──

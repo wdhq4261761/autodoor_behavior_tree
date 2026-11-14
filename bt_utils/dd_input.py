@@ -466,16 +466,15 @@ class DDVirtualInput(BaseInputController):
             return
 
         if horizontal:
-            try:
-                if position:
-                    self._dd_dll.DD_mov(position[0], position[1])
-                delta = int(round(amount)) * 120
-                if delta == 0:
-                    return
-                self._log(f"mouse_scroll horizontal: amount={amount}, delta={delta}, position={position}")
-                ctypes.windll.user32.mouse_event(0x01000, 0, 0, delta, 0)  # MOUSEEVENTF_HWHEEL
-            except Exception as e:
-                self._log(f"mouse_scroll horizontal ERROR: {e}")
+            if self._check_stop():
+                return
+            if position:
+                self._dd_dll.DD_mov(position[0], position[1])
+            delta = int(round(amount)) * 120
+            if delta == 0:
+                return
+            self._log(f"mouse_scroll horizontal: amount={amount}, delta={delta}, position={position}")
+            ctypes.windll.user32.mouse_event(0x01000, 0, 0, delta, 0)  # MOUSEEVENTF_HWHEEL
             return
 
         try:

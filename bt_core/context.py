@@ -387,14 +387,14 @@ class ExecutionContext:
         Returns:
             True: 已成功调用引擎；False: 引擎不可用或执行异常
         """
-        manager = self._get_input_manager()
-        kwargs = {}
-        if manager.get_mouse_method() == "bg" and self._bound_window:
-            kwargs["hwnd"] = self._bound_window
-        engine = manager.get_mouse_engine(**kwargs)
-        if not engine:
-            return False
         try:
+            manager = self._get_input_manager()
+            kwargs = {}
+            if manager.get_mouse_method() == "bg" and self._bound_window:
+                kwargs["hwnd"] = self._bound_window
+            engine = manager.get_mouse_engine(**kwargs)
+            if not engine:
+                return False
             engine.mouse_scroll(amount, position, horizontal)
             return True
         except Exception as e:
