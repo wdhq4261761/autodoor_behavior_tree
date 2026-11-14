@@ -259,11 +259,13 @@ class BackgroundInputController(BaseInputController):
 
         user32.PostMessageW(self._hwnd, WM_MOUSEMOVE, 0, lparam)
 
-    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
+    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None,
+                     horizontal: bool = False) -> None:
         """后台鼠标滚轮
 
-        WM_MOUSEWHEEL 的 lParam 需要屏幕坐标（MSDN规范），
+        WM_MOUSEWHEEL / WM_MOUSEHWHEEL 的 lParam 需要屏幕坐标（MSDN规范），
         而其他鼠标消息使用客户区坐标。此处将客户区坐标转换为屏幕坐标。
+        amount 单位是「格」，1 格 = WHEEL_DELTA = 120。
         """
         if not self._available:
             return
@@ -278,6 +280,9 @@ class BackgroundInputController(BaseInputController):
         user32.ClientToScreen(self._hwnd, ctypes.byref(screen_y))
         lparam = _make_lparam(screen_x.value, screen_y.value)
 
-        delta = amount * 120  # WHEEL_DELTA = 120
-        wparam = (delta << 16) & 0xFFFFFFFF
-        user32.PostMessageW(self._hwnd, WM_MOUSEWHEEL, wparam, lparam)
+        delta = int(round(amount)) * 120  # WHEEL_DELTA = 120
+        if delta == 0:
+            return
+        wparam = (delta & 0xFFFF) << 16
+        msg = WM_MOUSEHWHEEL if horizontal else WM_MOUSEWHEEL
+        user32.PostMessageW(self._hwnd, msg, wparam, lparam)

@@ -380,15 +380,26 @@ class ExecutionContext:
             return engine.get_position()
         return None
 
-    def execute_mouse_scroll(self, amount: int, position: tuple = None) -> None:
-        """执行鼠标滚轮滚动"""
+    def execute_mouse_scroll(self, amount: int, position: tuple = None,
+                             horizontal: bool = False) -> bool:
+        """执行鼠标滚轮滚动
+
+        Returns:
+            True: 已成功调用引擎；False: 引擎不可用或执行异常
+        """
         manager = self._get_input_manager()
         kwargs = {}
         if manager.get_mouse_method() == "bg" and self._bound_window:
             kwargs["hwnd"] = self._bound_window
         engine = manager.get_mouse_engine(**kwargs)
-        if engine:
-            engine.mouse_scroll(amount, position)
+        if not engine:
+            return False
+        try:
+            engine.mouse_scroll(amount, position, horizontal)
+            return True
+        except Exception as e:
+            LogManager.debug_print(f"[WARN] mouse_scroll failed: {e}")
+            return False
 
     def perform_ocr(self, image, keywords: str = None, language: str = "eng",
                     region: Tuple[int, int, int, int] = None,

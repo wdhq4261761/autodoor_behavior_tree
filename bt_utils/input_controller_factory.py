@@ -166,12 +166,21 @@ class PyAutoGUIInput(BaseInputController):
         else:
             pyautogui.moveTo(position[0], position[1])
     
-    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
-        """鼠标滚轮"""
+    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None,
+                     horizontal: bool = False) -> None:
+        """鼠标滚轮（amount 单位为格，1 格 = 120 WHEEL_DELTA）"""
         import pyautogui
+        import ctypes
+
+        delta = int(round(amount)) * 120
+        if delta == 0:
+            return
         if position:
             pyautogui.moveTo(position[0], position[1])
-        pyautogui.scroll(amount)
+        if horizontal:
+            ctypes.windll.user32.mouse_event(0x01000, 0, 0, delta, 0)  # MOUSEEVENTF_HWHEEL
+        else:
+            pyautogui.scroll(delta)
 
 
 class DDInputWrapper(BaseInputController):
@@ -230,9 +239,10 @@ class DDInputWrapper(BaseInputController):
         """移动鼠标"""
         self._dd.mouse_move(position, relative)
     
-    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
+    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None,
+                     horizontal: bool = False) -> None:
         """鼠标滚轮"""
-        self._dd.mouse_scroll(amount, position)
+        self._dd.mouse_scroll(amount, position, horizontal)
 
 
 class InputController:
@@ -391,9 +401,10 @@ class InputController:
         if self._impl:
             self._impl.mouse_move(position, relative)
     
-    def mouse_scroll(self, amount: int, position: tuple = None) -> None:
+    def mouse_scroll(self, amount: int, position: tuple = None,
+                     horizontal: bool = False) -> None:
         if self._impl:
-            self._impl.mouse_scroll(amount, position)
+            self._impl.mouse_scroll(amount, position, horizontal)
     
     def move_to(self, x: int, y: int) -> None:
         self.mouse_move((x, y), relative=False)

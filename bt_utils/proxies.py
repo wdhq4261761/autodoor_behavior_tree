@@ -59,11 +59,12 @@ class InputProxy:
         if engine:
             engine.mouse_move(position, relative)
 
-    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
+    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None,
+                     horizontal: bool = False) -> None:
         """鼠标滚轮"""
         engine = self._get_mouse_engine()
         if engine:
-            engine.mouse_scroll(amount, position)
+            engine.mouse_scroll(amount, position, horizontal)
 
 
 class ScreenshotProxy:

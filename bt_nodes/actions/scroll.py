@@ -19,25 +19,44 @@ class MouseScrollNode(ActionNode):
             clicks = self.config.get_int("clicks", 1)
             direction = self.config.get("direction", "向上")
 
-            scroll_distance = distance
+            if direction not in ("向上", "向下", "向左", "向右"):
+                LogManager.instance().log_failure(
+                    node_type="鼠标滚轮节点",
+                    node_name=self.name,
+                    reason=f"未知滚动方向: {direction}"
+                )
+                return NodeStatus.FAILURE
 
-            if direction == "向上":
-                scroll_distance = abs(distance)
-            elif direction == "向下":
-                scroll_distance = -abs(distance)
-            elif direction == "向左":
-                scroll_distance = -abs(distance)
-            elif direction == "向右":
-                scroll_distance = abs(distance)
+            magnitude = abs(distance)
+            if magnitude == 0:
+                LogManager.instance().log_failure(
+                    node_type="鼠标滚轮节点",
+                    node_name=self.name,
+                    reason="滚动距离不能为 0"
+                )
+                return NodeStatus.FAILURE
 
+            horizontal = direction in ("向左", "向右")
+            amount = magnitude if direction in ("向上", "向右") else -magnitude
+
+            sent = 0
             for click_num in range(clicks):
                 # ★ 检查是否应该停止（F12或超时后）
                 if not context.is_running:
-                    print(f"[MouseScroll] ⚠️ 检测到停止信号，中断第{click_num+1}/{clicks}次点击")
+                    print(f"[MouseScroll] ⚠️ 检测到停止信号，中断第{click_num+1}/{clicks}次滚动")
                     break
 
-                context.execute_mouse_scroll(scroll_distance)
-            
+                if context.execute_mouse_scroll(amount, horizontal=horizontal):
+                    sent += 1
+
+            if sent == 0:
+                LogManager.instance().log_failure(
+                    node_type="鼠标滚轮节点",
+                    node_name=self.name,
+                    reason="滚轮引擎不可用或已停止，没有发送任何滚动"
+                )
+                return NodeStatus.FAILURE
+
             LogManager.instance().log_success(
                 node_type="鼠标滚轮节点",
                 node_name=self.name
