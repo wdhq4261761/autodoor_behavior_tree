@@ -307,10 +307,14 @@ class VersionChecker:
         return '[FORCE_UPDATE]' in release_body.upper()
     
     def _get_download_url(self, data: Dict[str, Any]) -> str:
-        """获取下载链接"""
+        """获取下载链接
+
+        Release 资产名可能是 autodoor-behaviortree-x.y.z.zip（CI 打包）
+        或含 windows 的独立文件，两者都接受。
+        """
         for asset in data.get('assets', []):
             asset_name = asset.get('name', '').lower()
-            if 'windows' in asset_name:
+            if 'windows' in asset_name or asset_name.endswith(('.zip', '.7z', '.exe')):
                 return asset.get('browser_download_url', UPDATE_LINKS["download"])
         
         return UPDATE_LINKS["download"]

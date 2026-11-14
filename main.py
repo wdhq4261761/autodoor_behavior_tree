@@ -113,11 +113,11 @@ def load_version():
         try:
             with open(build_info_file, 'r', encoding='utf-8') as f:
                 build_info = json.load(f)
-                return build_info.get('version', '1.0.0')
+                return build_info.get('version', '0.0.0')
         except Exception:
             pass
     
-    return "1.2.2a"
+    return "0.0.0"
 
 def load_github_info():
     """从build_info.json加载GitHub仓库信息"""

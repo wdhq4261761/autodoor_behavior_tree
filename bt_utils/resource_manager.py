@@ -71,6 +71,17 @@ def get_user_plugin_dir() -> str:
     return os.path.join(get_app_home(), "plugins")
 
 
+def ensure_user_plugin_dir() -> str:
+    """确保用户插件目录存在并返回路径
+
+    发布包首次运行时 plugins/ 可能不存在（用户从未安装过插件），
+    若只做路径解析不做创建，插件管理页会空白且用户不知道该把插件放哪。
+    """
+    plugin_dir = get_user_plugin_dir()
+    os.makedirs(plugin_dir, exist_ok=True)
+    return plugin_dir
+
+
 @singleton
 class ResourceManager:
     DEFAULT_ALARM_SOUND = "assets/sounds/alarm.mp3"

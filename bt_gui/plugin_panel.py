@@ -4,11 +4,13 @@
     PluginCard    — 单个插件的卡片组件（状态指示 + 信息 + 启停按钮）
     PluginPanel   — 插件管理面板（按钮栏 + 可滚动插件列表 + 状态栏）
 """
+import os
 import customtkinter as ctk
 from tkinter import filedialog
 
 from .theme import Theme
 from bt_plugins.loader import PluginLoader
+from bt_utils.resource_manager import ensure_user_plugin_dir
 
 
 class PluginCard(ctk.CTkFrame):
@@ -255,6 +257,25 @@ class PluginPanel(ctk.CTkFrame):
         )
         title.pack(side="left")
 
+        # 插件目录提示行：告诉用户插件放在哪里，并提供一键打开
+        path_frame = ctk.CTkFrame(self, fg_color="transparent")
+        path_frame.pack(fill="x", padx=12, pady=(0, 2))
+        self._plugin_dir = ensure_user_plugin_dir()
+        path_label = ctk.CTkLabel(
+            path_frame,
+            text=f"插件目录：{self._plugin_dir}",
+            font=Theme.get_font('xs'),
+            text_color=self._dark_colors['text_muted'],
+            anchor="w"
+        )
+        path_label.pack(side="left", fill="x", expand=True)
+        open_dir_btn = ctk.CTkButton(
+            path_frame, text="打开目录", width=70, height=22,
+            font=Theme.get_font('xs'),
+            command=self._on_open_plugin_dir
+        )
+        open_dir_btn.pack(side="right", padx=(4, 0))
+
         # 按钮栏
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=12, pady=4)
@@ -342,6 +363,13 @@ class PluginPanel(ctk.CTkFrame):
     def _on_refresh(self):
         """刷新列表"""
         self._refresh_list()
+
+    def _on_open_plugin_dir(self):
+        """在资源管理器中打开插件目录"""
+        try:
+            os.startfile(self._plugin_dir)
+        except OSError as e:
+            self.status_label.configure(text=f"打开插件目录失败: {e}")
 
     def _on_start_all(self):
         """启动所有已加载插件，并持久化其自动启动状态"""

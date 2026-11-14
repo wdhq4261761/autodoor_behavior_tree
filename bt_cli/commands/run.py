@@ -33,10 +33,8 @@ def _run_headless(args):
         settings.set("websocket_server.enabled", True)
         settings.set("websocket_server.host", args.ws_host)
         settings.set("websocket_server.port", args.ws_port)
-    if args.plugins:
-        settings.set("plugins.enabled", True)
 
-    # 落盘保存配置
+    # 落盘保存配置（--plugins 不落盘，避免一次运行永久改变后续行为）
     settings.save_settings()
 
     # 打印运行信息
@@ -51,7 +49,7 @@ def _run_headless(args):
     if args.plugins:
         print(f"  插件系统: 已启用")
 
-    runner = HeadlessRunner()
+    runner = HeadlessRunner(enable_plugins=args.plugins)
 
     try:
         runner.run(args.tree_file, args.project)

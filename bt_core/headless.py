@@ -23,7 +23,7 @@ class HeadlessRunner:
         6. 启动引擎
     """
 
-    def __init__(self):
+    def __init__(self, enable_plugins: bool = False):
         self._engine = None
         self._context = None
         self._tree_file: Optional[str] = None
@@ -35,6 +35,8 @@ class HeadlessRunner:
         self._websocket_server = None
         self._server_thread = None
         self._plugin_loader = None
+        # CLI --plugins 只对本次进程生效，不写入用户配置
+        self._enable_plugins = enable_plugins
 
     def run(self, tree_file: str, project_root: str = None) -> None:
         """加载并运行行为树
@@ -164,7 +166,7 @@ class HeadlessRunner:
 
         必须在行为树反序列化之前调用，保证插件节点类型已注册进 NodeRegistry。
         """
-        if not settings.get("plugins.enabled", False):
+        if not (self._enable_plugins or settings.get("plugins.enabled", False)):
             return
 
         try:
@@ -176,7 +178,7 @@ class HeadlessRunner:
 
             # 扫描内置插件目录
             import os
-            from bt_utils.resource_manager import get_builtin_plugins_dir, get_user_plugin_dir
+            from bt_utils.resource_manager import ensure_user_plugin_dir, get_builtin_plugins_dir
             builtin_dir = get_builtin_plugins_dir()
             if os.path.isdir(builtin_dir):
                 for info in self._plugin_loader.scan(builtin_dir):
@@ -184,7 +186,7 @@ class HeadlessRunner:
                     self._plugin_loader.load_plugin(plugin_dir)
 
             # 扫描用户插件目录（打包版落在 exe 同级，不依赖 cwd）
-            user_dir = get_user_plugin_dir()
+            user_dir = ensure_user_plugin_dir()
             if os.path.isdir(user_dir):
                 for info in self._plugin_loader.scan(user_dir):
                     plugin_dir = os.path.join(user_dir, info.name)

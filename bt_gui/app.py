@@ -1,7 +1,7 @@
 import customtkinter as ctk
 import os
 import sys
-from tkinter import messagebox, StringVar
+from tkinter import messagebox
 
 from .theme import Theme, init_theme
 from .bt_editor import BehaviorTreeEditor
@@ -299,32 +299,6 @@ class BehaviorTreeApp(ctk.CTk):
         except ImportError:
             pass
 
-        # ============================================================
-        # 登录 UI 暂不对外开放（注释保留，后端登录接口仍可用）
-        # 如需恢复，取消下方注释即可
-        # ============================================================
-        # self._auth_btn = ctk.CTkButton(
-        #     left_section,
-        #     text="登录",
-        #     width=60,
-        #     height=28,
-        #     font=Theme.get_font('xs'),
-        #     fg_color=self._dark_colors['primary'],
-        #     hover_color=self._dark_colors['primary_hover'],
-        #     corner_radius=4,
-        #     command=self._on_auth_click
-        # )
-        # self._auth_btn.pack(side='left', padx=Theme.DIMENSIONS['spacing_sm'])
-        #
-        # self._auth_status_var = StringVar(value="未登录")
-        # self._auth_status_label = ctk.CTkLabel(
-        #     left_section,
-        #     textvariable=self._auth_status_var,
-        #     font=Theme.get_font('xs'),
-        #     text_color=self._dark_colors['text_muted']
-        # )
-        # self._auth_status_label.pack(side='left', padx=(0, Theme.DIMENSIONS['spacing_sm']))
-        
         center_section = ctk.CTkFrame(top_bar_content, fg_color='transparent')
         center_section.pack(side='left', expand=True)
         
@@ -468,10 +442,11 @@ class BehaviorTreeApp(ctk.CTk):
         import traceback
         try:
             import bt_plugins
-            from bt_utils.resource_manager import get_user_plugin_dir
-            builtin_dir = os.path.join(os.path.dirname(bt_plugins.__file__), 'builtin')
+            from bt_utils.resource_manager import ensure_user_plugin_dir, get_builtin_plugins_dir
+            builtin_dir = get_builtin_plugins_dir()
             # 用户插件目录（打包版 = exe 同级 plugins/，开发版 = 项目根 plugins/）
-            user_plugin_dir = get_user_plugin_dir()
+            # 首次运行必须创建，否则用户不知道插件应该放在哪里
+            user_plugin_dir = ensure_user_plugin_dir()
 
             plugin_context = PluginContext(settings=self._settings)
             self._plugin_loader = PluginLoader(plugin_context)
@@ -548,25 +523,6 @@ class BehaviorTreeApp(ctk.CTk):
         else:
             from tkinter import messagebox
             messagebox.showinfo("检查更新", "版本检查器未初始化")
-    
-    def _on_auth_click(self):
-        if hasattr(self, 'behavior_tree') and self.behavior_tree:
-            login_manager = getattr(self.behavior_tree, '_login_manager', None)
-            if login_manager and login_manager.is_authenticated():
-                self.behavior_tree._on_logout_click()
-            else:
-                self.behavior_tree._on_login_click()
-    
-    def set_auth_status(self, authenticated: bool, username: str = ""):
-        if hasattr(self, '_auth_btn') and hasattr(self, '_auth_status_var') and hasattr(self, '_auth_status_label'):
-            if authenticated:
-                self._auth_btn.configure(text="登出", fg_color=self._dark_colors['error'], hover_color='#DC2626')
-                self._auth_status_var.set(username)
-                self._auth_status_label.configure(text_color=Theme.COLORS['success'])
-            else:
-                self._auth_btn.configure(text="登录", fg_color=self._dark_colors['primary'], hover_color=self._dark_colors['primary_hover'])
-                self._auth_status_var.set("未登录")
-                self._auth_status_label.configure(text_color=self._dark_colors['text_muted'])
     
     def _get_current_tab(self) -> str:
         """获取当前Tab ID"""
