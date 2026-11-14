@@ -5,7 +5,7 @@ import os
 import json
 
 from bt_cli.errors import exit_with_code, EXIT_CONFIG_ERROR, EXIT_GENERIC_ERROR
-from bt_utils.json_io import load_json
+from bt_utils.json_io import JsonFormatError, load_json
 
 
 def cmd_ai(args):
@@ -141,7 +141,7 @@ def _cmd_select(args):
     try:
         plan = load_json(plan_path)
     except ValueError as e:
-        exit_with_code(EXIT_CONFIG_ERROR, f"错误: plan.json 解析失败: {e}")
+        exit_with_code(EXIT_CONFIG_ERROR, f"错误: 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
 
@@ -192,7 +192,7 @@ def _cmd_scan(args):
     try:
         structure = load_json(structure_path)
     except ValueError as e:
-        exit_with_code(EXIT_CONFIG_ERROR, f"错误: structure.json 解析失败: {e}")
+        exit_with_code(EXIT_CONFIG_ERROR, f"错误: 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
 
@@ -248,7 +248,7 @@ def _cmd_generate(args):
     try:
         structure = load_json(structure_path)
     except ValueError as e:
-        exit_with_code(EXIT_CONFIG_ERROR, f"错误: structure.json 解析失败: {e}")
+        exit_with_code(EXIT_CONFIG_ERROR, f"错误: 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
 
@@ -292,7 +292,7 @@ def _cmd_validate(args):
     try:
         tree_data = load_json(tree_path)
     except ValueError as e:
-        exit_with_code(EXIT_CONFIG_ERROR, f"错误: tree.json 解析失败: {e}")
+        exit_with_code(EXIT_CONFIG_ERROR, f"错误: 解析失败: {e}")
     except OSError as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"错误: 读取文件失败: {e}")
 
@@ -388,7 +388,7 @@ def _cmd_refine(args):
     engine = IterationEngine()
     try:
         result = engine.iterate(tree_path, max_rounds=max_rounds, task_context=task_context)
-    except (ValueError, OSError) as e:
+    except (JsonFormatError, OSError) as e:
         exit_with_code(EXIT_CONFIG_ERROR, f"读取或解析行为树失败: {e}")
 
     if result["success"]:
@@ -541,7 +541,7 @@ def _cmd_create(args):
             try:
                 result = engine.iterate(tree_path, max_rounds=max_rounds,
                                         task_context=plan.get("task_summary", ""))
-            except (ValueError, OSError) as e:
+            except (JsonFormatError, OSError) as e:
                 exit_with_code(EXIT_CONFIG_ERROR, f"读取或解析行为树失败: {e}")
             if result["success"]:
                 print(f"\n迭代成功！最终行为树: {tree_path}")

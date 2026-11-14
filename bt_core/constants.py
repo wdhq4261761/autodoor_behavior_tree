@@ -10,7 +10,6 @@
 """
 
 import os
-import json
 
 from bt_utils.json_io import load_json
 

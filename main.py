@@ -94,11 +94,10 @@ except Exception as e:
     write_log(f"DPI awareness initialization failed: {e}")
     traceback.print_exc()
 
-write_log("Importing json and logging...")
-import json
+write_log("Importing logging...")
 import logging
 from bt_utils.json_io import load_json
-write_log("json and logging imported successfully")
+write_log("logging imported successfully")
 
 def get_resource_path(relative_path):
     """获取资源文件的绝对路径，支持PyInstaller打包后的路径"""

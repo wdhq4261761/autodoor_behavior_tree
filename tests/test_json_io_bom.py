@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from bt_utils.json_io import load_json, save_json
+from bt_utils.json_io import JsonFormatError, load_json, save_json
 
 
 def test_load_json_with_bom(tmp_path):
@@ -33,6 +33,21 @@ def test_load_json_invalid_raises(tmp_path):
         load_json(p)
 
 
+def test_load_json_invalid_raises_json_format_error(tmp_path):
+    p = tmp_path / "bad.json"
+    p.write_text("{", encoding="utf-8")
+    with pytest.raises(JsonFormatError):
+        load_json(p)
+    assert issubclass(JsonFormatError, ValueError)
+
+
+def test_load_json_empty_raises_value_error(tmp_path):
+    p = tmp_path / "empty.json"
+    p.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_json(p)
+
+
 def test_save_json_roundtrip(tmp_path):
     p = tmp_path / "out.json"
     save_json(p, {"k": "中文"})
@@ -44,3 +59,9 @@ def test_save_json_creates_parent_dirs(tmp_path):
     save_json(p, {"k": "中文"})
     assert p.exists()
     assert json.loads(p.read_text(encoding="utf-8"))["k"] == "中文"
+
+
+def test_save_json_writes_without_bom(tmp_path):
+    p = tmp_path / "out.json"
+    save_json(p, {"k": "中文"})
+    assert not p.read_bytes().startswith(b"\xef\xbb\xbf")

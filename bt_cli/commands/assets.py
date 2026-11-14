@@ -392,7 +392,7 @@ def _manifest_path(project, override):
 def _load_manifest(path) -> dict:
     if not os.path.exists(path):
         return {"version": MANIFEST_VERSION, "targets": []}
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         content = f.read().strip()
     if not content:
         return {"version": MANIFEST_VERSION, "targets": []}

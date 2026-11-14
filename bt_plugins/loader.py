@@ -11,7 +11,6 @@
 所有插件回调用 try/except 包裹，单个插件异常不影响主进程。
 """
 import importlib.util
-import json
 import os
 import sys
 import threading
@@ -66,7 +65,7 @@ class PluginLoader:
         try:
             data = load_json(path)
         except (OSError, ValueError) as e:
-            print(f"[PluginLoader] 读取插件清单失败 {path}: {e}")
+            print(f"[PluginLoader] 读取插件清单失败: {e}")
             return None
         # 校验必填字段
         required = ("name", "display_name", "version", "author", "description")
@@ -119,7 +118,7 @@ class PluginLoader:
             try:
                 raw_manifest = load_json(manifest_path)
             except (OSError, ValueError) as e:
-                print(f"[PluginLoader] 读取入口配置失败 {manifest_path}: {e}")
+                print(f"[PluginLoader] 读取入口配置失败: {e}")
                 return False
             entry_file = raw_manifest.get("entry", "main.py")
             class_name = raw_manifest.get("class", "")
