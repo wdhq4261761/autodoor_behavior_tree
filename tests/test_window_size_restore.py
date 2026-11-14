@@ -68,6 +68,23 @@ def test_is_maximized_uses_window_placement():
         assert WindowManager.is_maximized(100) is False
 
 
+def test_is_minimized_uses_iconic():
+    class _FakeWin32GuiIconic:
+        def __init__(self, iconic):
+            self.iconic = iconic
+
+        def IsIconic(self, hwnd):
+            return self.iconic
+
+    fake_gui = _FakeWin32GuiIconic(True)
+    with patch.dict(sys.modules, {"win32gui": fake_gui}):
+        assert WindowManager.is_minimized(100) is True
+
+    fake_gui.iconic = False
+    with patch.dict(sys.modules, {"win32gui": fake_gui}):
+        assert WindowManager.is_minimized(100) is False
+
+
 def test_start_node_records_size_when_missing():
     node = StartNode(config=None)
     node.config.set("bind_window", True)

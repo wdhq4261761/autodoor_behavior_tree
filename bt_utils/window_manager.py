@@ -323,8 +323,7 @@ class WindowManager:
     @staticmethod
     def is_minimized(hwnd: int) -> bool:
         try:
-            import win32con
             import win32gui
-            return win32gui.GetWindowPlacement(hwnd)[1] == win32con.SW_SHOWMINIMIZED
+            return bool(win32gui.IsIconic(hwnd))
         except Exception:
             return False
