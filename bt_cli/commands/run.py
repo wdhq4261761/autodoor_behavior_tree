@@ -10,13 +10,15 @@ def cmd_run(args):
         sys.exit(3)
 
     if args.headless:
-        _run_headless(args)
+        code = _run_headless(args)
+        if code:
+            sys.exit(code)
     else:
         _run_gui(args)
 
 
 def _run_headless(args):
-    """无 GUI 模式运行"""
+    """无 GUI 模式运行，返回退出码（0 成功，2 预检未通过）"""
     from bt_core.headless import HeadlessRunner
     from config.settings_manager import get_settings_manager
 
@@ -52,15 +54,21 @@ def _run_headless(args):
     runner = HeadlessRunner(enable_plugins=args.plugins)
 
     try:
-        runner.run(args.tree_file, args.project)
+        code = runner.run(
+            args.tree_file, args.project,
+            check_preflight=not args.no_preflight,
+        )
     except KeyboardInterrupt:
         print("\n停止运行...")
         runner.stop()
+        return 0
     except Exception as e:
         print(f"运行错误: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+    return code
 
 
 def _run_gui(args):

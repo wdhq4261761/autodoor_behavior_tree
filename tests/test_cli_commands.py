@@ -28,6 +28,7 @@ def _make_args(**kwargs):
         "ws_host": "127.0.0.1",
         "ws_port": 8765,
         "plugins": False,
+        "no_preflight": False,
         "tree_id": None,
         "all": False,
         "force": False,
@@ -77,6 +78,7 @@ def test_run_headless_with_bus(tmp_path):
         mock_settings = MagicMock()
         mock_settings_cls.return_value = mock_settings
         mock_runner = MagicMock()
+        mock_runner.run.return_value = 0
         mock_runner_cls.return_value = mock_runner
 
         from bt_cli.commands.run import cmd_run
@@ -89,7 +91,7 @@ def test_run_headless_with_bus(tmp_path):
         # 验证配置被设置
         assert mock_settings.set.call_count >= 6
         # 验证 runner.run 被调用
-        mock_runner.run.assert_called_once_with(str(tree_file), None)
+        mock_runner.run.assert_called_once_with(str(tree_file), None, check_preflight=True)
 
 
 # ── config 命令 ──

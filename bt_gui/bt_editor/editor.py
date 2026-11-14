@@ -165,6 +165,17 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             instance.canvas.show_all_status_indicators()
         
         tree_data = instance.canvas.get_tree_data() if instance.canvas else {}
+        from bt_core.preflight import validate_tree_data
+        report = validate_tree_data(tree_data, instance.project_root)
+        if report.issues:
+            lines = report.format_lines()
+            detail = "\n".join(lines[:12])
+            if report.has_errors:
+                from tkinter import messagebox
+                if not messagebox.askyesno("运行前检查", detail + "\n\n发现错误，仍要继续运行吗？"):
+                    return False
+            else:
+                LogManager.debug_print("[Preflight] " + "；".join(lines[:5]))
         from bt_core.serializer import Serializer
         result = Serializer.deserialize(tree_data)
         if isinstance(result, tuple):

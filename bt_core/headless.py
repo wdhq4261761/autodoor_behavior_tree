@@ -38,12 +38,17 @@ class HeadlessRunner:
         # CLI --plugins 只对本次进程生效，不写入用户配置
         self._enable_plugins = enable_plugins
 
-    def run(self, tree_file: str, project_root: str = None) -> None:
+    def run(self, tree_file: str, project_root: str = None,
+            check_preflight: bool = True) -> int:
         """加载并运行行为树
 
         Args:
             tree_file: 行为树 JSON 文件路径
             project_root: 项目根目录，默认为行为树所在目录
+            check_preflight: 反序列化之前是否执行静态预检
+
+        Returns:
+            int: 退出码，0 表示正常结束，2 表示预检未通过而终止
 
         Raises:
             Exception: 加载或运行失败时抛出异常（不返回 False）
@@ -69,6 +74,18 @@ class HeadlessRunner:
 
         with open(tree_file, 'r', encoding='utf-8-sig') as f:
             tree_data = json.load(f)
+
+        if check_preflight:
+            from bt_core.preflight import validate_tree_data
+            report = validate_tree_data(
+                tree_data,
+                project_root or os.path.dirname(os.path.abspath(tree_file)),
+            )
+            for line in report.format_lines():
+                print(line)
+            if report.has_errors:
+                print("预检未通过，已终止运行。使用 --no-preflight 可跳过。")
+                return 2
 
         result = Serializer.deserialize(tree_data)
         if isinstance(result, tuple):
@@ -100,6 +117,8 @@ class HeadlessRunner:
             self._engine.stop()
         finally:
             self._stop_service_layer()
+
+        return 0
 
     def _start_service_layer(self, settings) -> None:
         """启动服务层（消息总线、适配器、服务注册、REST/WebSocket 服务器）"""

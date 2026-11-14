@@ -59,6 +59,7 @@ def main():
     run_parser.add_argument("--ws-host", default="127.0.0.1")
     run_parser.add_argument("--ws-port", type=int, default=8765)
     run_parser.add_argument("--plugins", action="store_true", help="启用插件系统")
+    run_parser.add_argument("--no-preflight", action="store_true", help="跳过运行前静态检查")
 
     # status 命令
     subparsers.add_parser("status", help="查询运行状态")
