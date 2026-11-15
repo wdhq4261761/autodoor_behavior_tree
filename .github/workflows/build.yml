@@ -23,6 +23,8 @@ jobs:
   build-windows:
     name: Build Windows (Unified)
     runs-on: windows-latest
+    outputs:
+      version_changed: ${{ steps.version_change.outputs.changed }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -36,6 +38,23 @@ jobs:
         Write-Host "Version: $VERSION"
         echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
 
+    - name: Detect version change
+      id: version_change
+      shell: pwsh
+      run: |
+        $VERSION = "${{ steps.get_version.outputs.VERSION }}"
+        $CHANGED = "true"
+        $PREV_VERSION = "none"
+        $PREV_JSON = (git show HEAD~1:build_config.json 2>$null) -join "`n"
+        if ($LASTEXITCODE -eq 0 -and $PREV_JSON) {
+          $PREV_VERSION = ($PREV_JSON | ConvertFrom-Json).version
+          if ($PREV_VERSION -eq $VERSION) {
+            $CHANGED = "false"
+          }
+        }
+        Write-Host "Version changed: $CHANGED (previous: $PREV_VERSION, current: $VERSION)"
+        echo "changed=$CHANGED" >> $env:GITHUB_OUTPUT
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -45,7 +64,10 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt pyinstaller
+        pip install -r requirements.txt -r requirements-dev.txt pyinstaller
+
+    - name: Run tests
+      run: python -m pytest tests -q
 
     - name: Generate build info
       run: |
@@ -89,6 +111,83 @@ jobs:
         $VERSION = "${{ steps.get_version.outputs.VERSION }}"
         python scripts/post_build.py "dist/autodoor-behaviortree-$VERSION"
 
+    - name: Smoke test packaged CLI
+      shell: pwsh
+      run: |
+        $VERSION = "${{ steps.get_version.outputs.VERSION }}"
+        $CLI = "${{ github.workspace }}\dist\autodoor-behaviortree-$VERSION\autodoor-cli.exe"
+        $SMOKE = Join-Path $env:RUNNER_TEMP "autodoor-smoke"
+        New-Item -ItemType Directory -Force -Path $SMOKE | Out-Null
+
+        $OK_TREE = @'
+        {
+          "version": "2.1",
+          "format_type": "behavior_tree",
+          "root_node": "root",
+          "nodes": {
+            "root": {"id": "root", "type": "SequenceNode", "name": "根", "config": {}},
+            "delay": {"id": "delay", "type": "DelayNode", "name": "等待", "config": {"duration_ms": 100}}
+          },
+          "connections": [{"parent_id": "root", "child_id": "delay"}]
+        }
+        '@
+        Set-Content -Path "$SMOKE\ok.json" -Value $OK_TREE -Encoding utf8
+
+        $FAIL_TREE = @'
+        {
+          "version": "2.1",
+          "format_type": "behavior_tree",
+          "root_node": "root",
+          "nodes": {
+            "root": {"id": "root", "type": "SequenceNode", "name": "根", "config": {}},
+            "img": {"id": "img", "type": "ImageConditionNode", "name": "找图", "config": {"template_path": "./images/none.png", "threshold": 0.9}}
+          },
+          "connections": [{"parent_id": "root", "child_id": "img"}]
+        }
+        '@
+        Set-Content -Path "$SMOKE\fail.json" -Value $FAIL_TREE -Encoding utf8
+
+        $LONG_TREE = @'
+        {
+          "version": "2.1",
+          "format_type": "behavior_tree",
+          "root_node": "root",
+          "nodes": {
+            "root": {"id": "root", "type": "SequenceNode", "name": "根", "config": {}},
+            "delay": {"id": "delay", "type": "DelayNode", "name": "等待", "config": {"duration_ms": 12000}}
+          },
+          "connections": [{"parent_id": "root", "child_id": "delay"}]
+        }
+        '@
+        Set-Content -Path "$SMOKE\long.json" -Value $LONG_TREE -Encoding utf8
+
+        & $CLI run "$SMOKE\ok.json" --headless
+        if ($LASTEXITCODE -ne 0) { Write-Error "normal run exit code: $LASTEXITCODE"; exit 1 }
+
+        & $CLI run "$SMOKE\fail.json" --headless
+        if ($LASTEXITCODE -ne 2) { Write-Error "preflight failure exit code: $LASTEXITCODE"; exit 1 }
+
+        & $CLI run "$SMOKE\fail.json" --headless --no-preflight
+        if ($LASTEXITCODE -ne 1) { Write-Error "runtime failure exit code: $LASTEXITCODE"; exit 1 }
+
+        & $CLI plugin nodes | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Error "plugin nodes exit code: $LASTEXITCODE"; exit 1 }
+
+        $PROC = Start-Process -FilePath $CLI -ArgumentList @('run', "$SMOKE\long.json", '--headless', '--rest', '--rest-port', '18080') -PassThru -WindowStyle Hidden
+        $HEALTHY = $false
+        for ($i = 0; $i -lt 30; $i++) {
+          Start-Sleep -Milliseconds 500
+          try {
+            Invoke-RestMethod -Uri 'http://127.0.0.1:18080/api/v1/health' -TimeoutSec 2 | Out-Null
+            $HEALTHY = $true
+            break
+          } catch { }
+        }
+        if (-not $PROC.HasExited) { Stop-Process -Id $PROC.Id -Force }
+        if (-not $HEALTHY) { Write-Error "REST health check failed"; exit 1 }
+
+        Write-Host "Packaged CLI smoke test passed"
+
     - name: Verify build output
       run: |
         $VERSION = "${{ steps.get_version.outputs.VERSION }}"
@@ -131,7 +230,7 @@ jobs:
     name: Deploy to GitHub Releases
     runs-on: ubuntu-latest
     needs: [build-windows]
-    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/autodoor_V')
+    if: startsWith(github.ref, 'refs/tags/autodoor_V') || (github.ref == 'refs/heads/master' && needs.build-windows.outputs.version_changed == 'true')
     permissions:
       contents: write
       actions: read
