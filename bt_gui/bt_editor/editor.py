@@ -20,6 +20,7 @@ from .undo_redo import (
 )
 from .gui_tab_manager import GuiTabManager
 from .tab_bar import TabBar
+from .window_state import apply_window_state
 from bt_utils.log_manager import LogManager
 from bt_utils.json_io import load_json
 from bt_core.engine import BehaviorTreeEngine
@@ -222,6 +223,11 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         
         engine.start(context)
         self.tab_manager.update_tab_status(tab_id, True)
+
+        # 开始节点绑定窗口后会记录窗口尺寸；运行期树是副本，稍后同步回画布，
+        # 保存工程后才能在下次运行时触发尺寸还原。
+        if instance.canvas:
+            instance.canvas.after(600, lambda: self._sync_runtime_window_state(tab_id))
         
         if not skip_sound:
             self._play_start_sound()
@@ -367,7 +373,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         instance = self.tab_manager.get_tab(tab_id)
         if not instance or not instance.canvas:
             return
-        
+
+        if instance.engine:
+            apply_window_state(getattr(instance.engine, "root_node", None), instance.canvas.nodes)
+
         tree_data = instance.canvas.get_tree_data()
         
         if instance.project_root:
@@ -1889,6 +1898,33 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             if instance.canvas and node_id in instance.canvas.nodes:
                 instance.canvas.set_node_status(node_id, node_status)
                 return
+
+    def _sync_runtime_window_state(self, tab_id: str):
+        """把运行期记录的窗口尺寸回写到画布节点配置。"""
+        instance = self.tab_manager.get_tab(tab_id)
+        if not instance or not instance.canvas or not instance.engine:
+            return
+        canvas = instance.canvas
+        try:
+            if not canvas.winfo_exists():
+                return
+        except Exception:
+            return
+
+        root = getattr(instance.engine, "root_node", None)
+        if root is None:
+            return
+        changed = apply_window_state(root, canvas.nodes)
+        if not changed:
+            return
+
+        instance.modified = True
+        self.on_content_changed()
+        active = self.tab_manager.get_active_tab()
+        if active is instance and self.property_panel.current_node_id in changed:
+            node = canvas.nodes.get(self.property_panel.current_node_id)
+            if node is not None:
+                self._on_node_select(node.node_id, node.node_type)
 
     def _set_modified(self, modified: bool):
         self._modified = modified

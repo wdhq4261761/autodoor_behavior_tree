@@ -203,7 +203,12 @@ a = Analysis(
         'comtypes',
         'comtypes.client',
         'comtypes.stream',
-    ] + collect_submodules('pynput') + collect_submodules('bt_core') + collect_submodules('bt_gui') + collect_submodules('bt_nodes') + collect_submodules('bt_utils') + collect_submodules('bt_plugins') + collect_submodules('rapidocr') + collect_submodules('pywinauto') + collect_submodules('comtypes'),
+
+        # REST 服务（打包版能力）：FastAPI/uvicorn 及其动态加载的协议实现
+        'fastapi',
+        'starlette',
+        'uvicorn',
+    ] + collect_submodules('pynput') + collect_submodules('bt_core') + collect_submodules('bt_gui') + collect_submodules('bt_nodes') + collect_submodules('bt_utils') + collect_submodules('bt_plugins') + collect_submodules('rapidocr') + collect_submodules('pywinauto') + collect_submodules('comtypes') + collect_submodules('fastapi') + collect_submodules('starlette') + collect_submodules('uvicorn'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -215,7 +220,7 @@ a = Analysis(
         'jax', 'jaxlib', 'timm', 'diffusers', 'peft',
         'gradio', 'streamlit', 'dash',
         
-        'flask', 'django', 'fastapi', 'uvicorn', 'gunicorn',
+        'flask', 'django', 'gunicorn',
         'beautifulsoup4', 'selenium', 'webdriver_manager',
         
         'pyqt5', 'pyside6', 'wxpython', 'tkinterdnd2',

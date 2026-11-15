@@ -49,7 +49,8 @@ class HeadlessRunner:
             check_preflight: 反序列化之前是否执行静态预检
 
         Returns:
-            int: 退出码，0 表示正常结束，2 表示预检未通过而终止
+            int: 退出码。0 正常结束，1 运行期失败（根节点失败或引擎异常），
+                 2 预检未通过而终止，130 用户中断
 
         Raises:
             Exception: 加载或运行失败时抛出异常（不返回 False）
@@ -107,16 +108,24 @@ class HeadlessRunner:
 
         self._engine.start(self._context)
 
+        interrupted = False
         try:
             while self._engine.get_status()['running'] and self._engine._thread.is_alive():
                 if self._stop_requested.is_set():
                     break
                 time.sleep(0.1)
         except KeyboardInterrupt:
+            interrupted = True
             self._engine.stop()
         finally:
             self._stop_service_layer()
 
+        if interrupted:
+            return 130
+
+        from bt_core.status import NodeStatus
+        if self._engine.get_last_status() == NodeStatus.FAILURE:
+            return 1
         return 0
 
     def _start_service_layer(self, settings) -> None:

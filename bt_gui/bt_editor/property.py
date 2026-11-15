@@ -322,7 +322,7 @@ NODE_CONFIG_SCHEMAS = {
         {"key": "bind_window", "label": "绑定窗口", "type": "bool", "default": False},
         {"key": "window_title", "label": "窗口标题", "type": "window_select", "default": "", "hide_if": {"field": "bind_window", "value": False}},
         {"key": "restore_window_size", "label": "自动还原窗口尺寸", "type": "bool", "default": True, "hide_if": {"field": "bind_window", "value": False}},
-        {"key": "window_size", "label": "窗口尺寸（宽x高）", "type": "text", "default": "", "hide_if": {"field": "bind_window", "value": False}},
+        {"key": "window_size", "label": "窗口尺寸（宽x高）", "type": "window_size", "default": "", "hide_if": {"field": "bind_window", "value": False}},
         {"key": "window_pid", "label": "窗口PID", "type": "number", "default": 0, "hidden": True},
         {"key": "window_hwnd", "label": "窗口句柄", "type": "number", "default": 0, "hidden": True},
     ],
@@ -497,6 +497,69 @@ class TextField(FieldWidget):
         else:
             self.var.set("")
     
+    def get_value(self) -> Any:
+        return self.var.get()
+
+
+class WindowSizeField(FieldWidget):
+    """窗口尺寸只读输入框，右侧提供“读取窗口尺寸”按钮。"""
+
+    def __init__(self, master, label: str, key: str, on_change: Callable,
+                 on_read_size: Callable, **kwargs):
+        self._on_read_size = on_read_size
+        super().__init__(master, label, key, on_change, **kwargs)
+        self._create_widget()
+
+    def _create_widget(self):
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x")
+
+        self.var = tk.StringVar(value="")
+        self.entry = ctk.CTkEntry(
+            row,
+            textvariable=self.var,
+            font=Theme.get_font('sm'),
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['bg_tertiary'],
+            border_color=self._dark_colors['border'],
+            text_color=self._dark_colors['text_primary'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+            state="disabled",
+        )
+        self.read_btn = ctk.CTkButton(
+            row,
+            text="读取窗口尺寸",
+            font=Theme.get_font('sm'),
+            width=130,
+            height=Theme.DIMENSIONS['input_height'],
+            fg_color=self._dark_colors['primary'],
+            hover_color=self._dark_colors['primary_hover'],
+            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
+            command=self._read_current_size,
+        )
+        self.read_btn.pack(side="right")
+
+        self.entry.pack(side="left", fill="x", expand=True, padx=(0, Theme.DIMENSIONS['spacing_xs']))
+        self.after_idle(self._fit_button_width)
+
+    def _fit_button_width(self):
+        """按钮宽度贴合文字，仅保留少量内边距。"""
+        if not self.read_btn.winfo_exists():
+            return
+        text_width = self.read_btn._text_label.winfo_reqwidth()
+        if text_width <= 1:
+            return
+        scaling = ctk.ScalingTracker.get_widget_scaling(self.read_btn) or 1.0
+        self.read_btn.configure(width=max(60, int(text_width / scaling) + 10))
+
+    def _read_current_size(self):
+        self._on_read_size(self)
+
+    def set_value(self, value: Any):
+        self.entry.configure(state="normal")
+        self.var.set("" if value is None else str(value))
+        self.entry.configure(state="disabled")
+
     def get_value(self) -> Any:
         return self.var.get()
 
@@ -2926,13 +2989,12 @@ class PropertyPanel(ctk.CTkFrame):
                 for field in field_list:
                     value = config_data.get(field["key"]) if isinstance(field, dict) and "key" in field else config_data.get(field.get("key"))
                     async_steps.append(("config_field", field, value))
+                    if node_type == "ImageConditionNode" and field.get("key") == "template_path":
+                        async_steps.append(("thumbnail_section", node_type, config_data))
 
             config = node_data.get("config", {})
             if node_type == "SubtreeNode" and isinstance(config, dict) and "_aut_parameter_file" in config:
                 async_steps.append(("aut_param", config, None))
-
-            if node_type == "ImageConditionNode":
-                async_steps.append(("thumbnail_section", node_type, node_data.get("config", {})))
 
             if node_type in CONDITION_NODES:
                 async_steps.append(("preview_section", node_type, node_data.get("config", {})))
@@ -3023,10 +3085,12 @@ class PropertyPanel(ctk.CTkFrame):
         self.view_image_btn.pack_forget()
 
     def _create_thumbnail_section(self, _node_type: str, config: Dict[str, Any]):
-        self._create_section_title("模板预览")
+        # 缩略图作为模板路径的附属信息，插在配置字段之间（模板路径之后、匹配阈值之前）
+        parent = getattr(self, "config_fields_frame", None) or self.content_frame
+        self._create_section_title("模板预览", parent=parent)
 
         frame = ctk.CTkFrame(
-            self.content_frame,
+            parent,
             fg_color=self._dark_colors['bg_tertiary'],
             corner_radius=Theme.DIMENSIONS['button_corner_radius'],
         )
@@ -3315,8 +3379,8 @@ class PropertyPanel(ctk.CTkFrame):
         
         return {"success": success, "image_path": image_path}
     
-    def _create_section_title(self, title: str):
-        section_frame = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+    def _create_section_title(self, title: str, parent=None):
+        section_frame = ctk.CTkFrame(parent or self.content_frame, fg_color="transparent")
         section_frame.pack(fill="x", pady=(Theme.DIMENSIONS['spacing_lg'], Theme.DIMENSIONS['spacing_sm']))
         
         section_label = ctk.CTkLabel(
@@ -3432,6 +3496,10 @@ class PropertyPanel(ctk.CTkFrame):
             field_widget = RegionOffsetField(container, label, key, self._on_field_change, self.app)
         elif field_type == "window_select":
             field_widget = WindowSelectField(container, label, key, self._on_field_change, self.app, self._update_widget_value)
+        elif field_type == "window_size":
+            field_widget = WindowSizeField(
+                container, label, key, self._on_field_change, self._read_current_window_size
+            )
         elif field_type == "script_convert":
             field_widget = ScriptConvertField(container, label, key, self._on_field_change, self.app)
         elif field_type == "text_list":
@@ -3541,6 +3609,45 @@ class PropertyPanel(ctk.CTkFrame):
                         pass
 
                 self._create_field(field_def, value, group_frame)
+
+    def _read_current_window_size(self, widget):
+        """读取当前绑定窗口的实际尺寸并写回尺寸输入框。"""
+        from bt_utils.window_manager import WindowManager
+
+        title = ""
+        if "window_title" in self.widgets:
+            title = str(self.widgets["window_title"].get_value() or "").strip()
+        try:
+            hwnd = int(self._hidden_values.get("window_hwnd", 0) or 0)
+            pid = int(self._hidden_values.get("window_pid", 0) or 0)
+        except (TypeError, ValueError):
+            hwnd, pid = 0, 0
+
+        found, _method = WindowManager.find_window_smart_with_hwnd(
+            hwnd=hwnd,
+            pid=pid or None,
+            title_keyword=title,
+        )
+        if not found:
+            messagebox.showwarning(
+                "读取窗口尺寸",
+                "未找到目标窗口，请先选择窗口标题，或运行一次行为树以记录窗口句柄。",
+            )
+            return
+
+        size = WindowManager.get_window_size(found)
+        if not size:
+            messagebox.showwarning(
+                "读取窗口尺寸",
+                "无法读取窗口尺寸，窗口可能已关闭或处于最小化状态。",
+            )
+            return
+
+        text = WindowManager.format_window_size(size)
+        widget.set_value(text)
+        self._on_field_change(widget.key, text)
+        if found != hwnd:
+            self._on_field_change("window_hwnd", found)
 
     def _on_field_change(self, key: str, value: Any):
         if self._is_loading:
