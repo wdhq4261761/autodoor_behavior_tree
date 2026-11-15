@@ -7,10 +7,14 @@ import time
 from .status import NodeStatus
 from .config import NodeConfig
 from bt_utils.helpers import get_random_interval
+from bt_utils.json_io import load_json
 from bt_utils.log_manager import LogManager
 
 if TYPE_CHECKING:
     from .context import ExecutionContext
+
+
+WINDOW_SIZE_TOLERANCE_PX = 2
 
 
 class Node(ABC):
@@ -1490,6 +1494,26 @@ class StartNode(CompositeNode):
             context.bind_window(hwnd)
             if window_hwnd != hwnd:
                 self.config.set("window_hwnd", hwnd)
+
+            restore_size = self.config.get_bool("restore_window_size", True)
+            if restore_size and not WindowManager.is_minimized(hwnd):
+                if WindowManager.is_maximized(hwnd):
+                    self.config.set("window_maximized", True)
+                else:
+                    recorded = WindowManager.parse_window_size(self.config.get("window_size", ""))
+                    current = WindowManager.get_window_size(hwnd)
+                    if recorded:
+                        if current and (abs(current[0] - recorded[0]) > WINDOW_SIZE_TOLERANCE_PX or
+                                        abs(current[1] - recorded[1]) > WINDOW_SIZE_TOLERANCE_PX):
+                            if not WindowManager.set_window_size(hwnd, recorded):
+                                LogManager.instance().log_failure(
+                                    node_type="开始节点",
+                                    node_name=self.name,
+                                    reason=f"窗口尺寸还原失败: {WindowManager.format_window_size(recorded)}"
+                                )
+                    elif current:
+                        self.config.set("window_size", WindowManager.format_window_size(current))
+                        self.config.set("window_maximized", False)
         else:
             LogManager.instance().log_failure(
                 node_type="开始节点",
@@ -1748,9 +1772,7 @@ class SubtreeNode(CompositeNode):
         project_json = os.path.join(project_dir, "project.json")
         if os.path.exists(project_json):
             try:
-                with open(project_json, 'r', encoding='utf-8') as f:
-                    import json
-                    proj_data = json.load(f)
+                proj_data = load_json(project_json)
                 main_tree = proj_data.get("main_tree", "tree.json")
                 tree_path = os.path.join(project_dir, main_tree)
                 if os.path.exists(tree_path):
@@ -1789,9 +1811,7 @@ class SubtreeNode(CompositeNode):
             if not os.path.exists(project_json):
                 return False, None
 
-            with open(project_json, 'r', encoding='utf-8') as f:
-                import json as _json
-                proj_data = _json.load(f)
+            proj_data = load_json(project_json)
 
             if proj_data.get("encrypted") and proj_data.get("aut_file"):
                 aut_path = os.path.join(project_dir, proj_data["aut_file"])

@@ -20,7 +20,9 @@ from .undo_redo import (
 )
 from .gui_tab_manager import GuiTabManager
 from .tab_bar import TabBar
+from .window_state import apply_window_state
 from bt_utils.log_manager import LogManager
+from bt_utils.json_io import load_json
 from bt_core.engine import BehaviorTreeEngine
 from bt_core.context import ExecutionContext
 from bt_core.serializer import Serializer
@@ -165,6 +167,25 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             instance.canvas.show_all_status_indicators()
         
         tree_data = instance.canvas.get_tree_data() if instance.canvas else {}
+        if not tree_data or not tree_data.get("nodes"):
+            messagebox.showwarning("警告", "行为树为空，无法运行")
+            return False
+
+        from bt_core.preflight import validate_tree_data
+        report = validate_tree_data(tree_data, instance.project_root)
+        if report.issues:
+            lines = report.format_lines()
+            detail = "\n".join(lines[:12])
+            if len(lines) > 12:
+                detail += f"\n…（其余 {len(lines) - 12} 条已省略）"
+            if report.has_errors:
+                if not messagebox.askyesno(
+                        "运行前检查",
+                        detail + "\n\n发现错误，仍要继续运行吗？",
+                        default="no"):
+                    return False
+            else:
+                LogManager.debug_print("[Preflight] " + "；".join(lines[:5]))
         from bt_core.serializer import Serializer
         result = Serializer.deserialize(tree_data)
         if isinstance(result, tuple):
@@ -173,7 +194,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             root_node = result
         
         if not root_node:
-            from tkinter import messagebox
             messagebox.showwarning("警告", "行为树为空，无法运行")
             return False
         
@@ -203,6 +223,11 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         
         engine.start(context)
         self.tab_manager.update_tab_status(tab_id, True)
+
+        # 开始节点绑定窗口后会记录窗口尺寸；运行期树是副本，稍后同步回画布，
+        # 保存工程后才能在下次运行时触发尺寸还原。
+        if instance.canvas:
+            instance.canvas.after(600, lambda: self._sync_runtime_window_state(tab_id))
         
         if not skip_sound:
             self._play_start_sound()
@@ -348,7 +373,10 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         instance = self.tab_manager.get_tab(tab_id)
         if not instance or not instance.canvas:
             return
-        
+
+        if instance.engine:
+            apply_window_state(getattr(instance.engine, "root_node", None), instance.canvas.nodes)
+
         tree_data = instance.canvas.get_tree_data()
         
         if instance.project_root:
@@ -413,8 +441,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             return
         
         try:
-            with open(tree_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data = load_json(tree_file)
             instance.canvas.load_tree(data)
             instance.file_path = tree_file
         except Exception as e:
@@ -491,7 +518,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             on_start=self._start_running,
             on_stop=self._stop_running,
             on_open_folder=self._open_project_folder,
-            on_toggle_ai=self.toggle_ai_assistant,
             )
         self.toolbar.pack(fill="x")
     
@@ -502,7 +528,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         self._create_palette()
         self._create_canvas()
         self._create_property_panel()
-        self._create_ai_assistant_panel()
         
         self._create_log_panel()
     
@@ -604,107 +629,6 @@ class BehaviorTreeEditor(ctk.CTkFrame):
     def _create_property_panel(self):
         pass
 
-    def _create_ai_assistant_panel(self):
-        """创建 AI 助手面板（默认隐藏）"""
-        from bt_gui.ai_assistant.assistant_panel import AssistantPanel
-        from bt_gui.ai_assistant.canvas_overlay import CanvasOverlay
-
-        self.ai_assistant_panel = AssistantPanel(
-            self.main_area,
-            editor=self,
-        )
-        # 默认隐藏
-        self.ai_assistant_panel.hide()
-
-        # 注册回调
-        self.ai_assistant_panel.register_callback(
-            "on_tree_generated", self._on_ai_tree_generated
-        )
-        self.ai_assistant_panel.register_callback(
-            "on_tree_updated", self._on_ai_tree_updated
-        )
-        self.ai_assistant_panel.register_callback(
-            "on_vlm_suggestions", self._on_ai_vlm_suggestions
-        )
-
-        # 创建画布标注覆盖层
-        active_tab = self.tab_manager.get_active_tab()
-        if active_tab and active_tab.canvas:
-            self._canvas_overlay = CanvasOverlay(active_tab.canvas)
-        else:
-            self._canvas_overlay = CanvasOverlay(self._fallback_canvas)
-
-    def toggle_ai_assistant(self):
-        """切换 AI 助手面板可见性"""
-        if hasattr(self, 'ai_assistant_panel'):
-            self.ai_assistant_panel.toggle()
-
-    def _on_ai_tree_generated(self, tree_data):
-        """AI 生成行为树后加载到画布"""
-        import json, tempfile, os
-        tree_path = os.path.join(tempfile.gettempdir(), "ai_generated_tree.json")
-        with open(tree_path, "w", encoding="utf-8") as f:
-            json.dump(tree_data, f, ensure_ascii=False)
-        self.load_tree(tree_path)
-
-    def _on_ai_tree_updated(self, tree_data):
-        """AI 修正后更新画布"""
-        active_tab = self.tab_manager.get_active_tab()
-        if active_tab and active_tab.canvas:
-            # 更新画布节点数据
-            for node_id, node_data in tree_data.get("nodes", {}).items():
-                if hasattr(active_tab.canvas, 'nodes') and node_id in active_tab.canvas.nodes:
-                    node_item = active_tab.canvas.nodes[node_id]
-                    # 更新配置
-                    if hasattr(node_item, 'config'):
-                        node_item.config = node_data.get("config", {})
-                    if hasattr(active_tab.canvas, '_update_node_display'):
-                        active_tab.canvas._update_node_display(node_id)
-
-    def _on_ai_vlm_suggestions(self, suggestions):
-        """VLM 分析完成后在画布上绘制标注"""
-        if not hasattr(self, '_canvas_overlay'):
-            return
-
-        # 健壮性：suggestions 可能为 None 或非列表（脏数据），
-        # 直接迭代会抛 TypeError，导致画布标注中断。
-        if not suggestions or not isinstance(suggestions, (list, tuple)):
-            return
-
-        self._canvas_overlay.clear()
-        for sug in suggestions:
-            # 健壮性：单条建议数据异常时跳过该条，绝不中断整批标注。
-            if not isinstance(sug, dict):
-                continue
-            try:
-                value = sug.get("suggested_value", [])
-                param = sug.get("param", "")
-                node_id = sug.get("node_id", "")
-                confidence = sug.get("confidence", 0)
-
-                # 根据参数类型确定标注类型
-                if param in ("region",):
-                    ann_type = "region"
-                elif param in ("position",):
-                    ann_type = "position"
-                elif param in ("template_path",):
-                    ann_type = "template"
-                else:
-                    continue
-
-                self._canvas_overlay.add_annotation(
-                    node_id=node_id,
-                    param=param,
-                    value=value,
-                    confidence=confidence,
-                    annotation_type=ann_type,
-                )
-            except Exception:
-                # 单条建议标注失败：跳过该条，避免因单条脏数据中断整批标注
-                continue
-
-        self._canvas_overlay.show()
-    
     def _bind_events(self):
         self._init_ui_dispatcher()
         self._bind_run_shortcuts()
@@ -1328,8 +1252,7 @@ class BehaviorTreeEditor(ctk.CTkFrame):
             return
         
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data = load_json(file_path)
             
             if not skip_clear:
                 self.clear_canvas()
@@ -1394,11 +1317,8 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         Args:
             script_path: 旧脚本文件路径
         """
-        import json
-        
         try:
-            with open(script_path, 'r', encoding='utf-8') as f:
-                script_data = json.load(f)
+            script_data = load_json(script_path)
             
             script_dir = os.path.dirname(script_path)
             
@@ -1979,6 +1899,33 @@ class BehaviorTreeEditor(ctk.CTkFrame):
                 instance.canvas.set_node_status(node_id, node_status)
                 return
 
+    def _sync_runtime_window_state(self, tab_id: str):
+        """把运行期记录的窗口尺寸回写到画布节点配置。"""
+        instance = self.tab_manager.get_tab(tab_id)
+        if not instance or not instance.canvas or not instance.engine:
+            return
+        canvas = instance.canvas
+        try:
+            if not canvas.winfo_exists():
+                return
+        except Exception:
+            return
+
+        root = getattr(instance.engine, "root_node", None)
+        if root is None:
+            return
+        changed = apply_window_state(root, canvas.nodes)
+        if not changed:
+            return
+
+        instance.modified = True
+        self.on_content_changed()
+        active = self.tab_manager.get_active_tab()
+        if active is instance and self.property_panel.current_node_id in changed:
+            node = canvas.nodes.get(self.property_panel.current_node_id)
+            if node is not None:
+                self._on_node_select(node.node_id, node.node_type)
+
     def _set_modified(self, modified: bool):
         self._modified = modified
         active_tab = self.tab_manager.get_active_tab()
@@ -2499,42 +2446,26 @@ class BehaviorTreeEditor(ctk.CTkFrame):
         try:
             if self._login_manager.auto_login():
                 username = self._login_manager.get_current_user() or ""
-                if hasattr(self, 'app') and hasattr(self.app, 'set_auth_status'):
-                    self.app.set_auth_status(True, username)
                 LogManager.debug_print(f"[Auth] 自动登录成功: {username}")
-            else:
-                if hasattr(self, 'app') and hasattr(self.app, 'set_auth_status'):
-                    self.app.set_auth_status(False)
         except Exception as e:
             LogManager.debug_print(f"[Auth] 自动登录失败: {e}")
-            if hasattr(self, 'app') and hasattr(self.app, 'set_auth_status'):
-                self.app.set_auth_status(False)
     
     def _on_login_click(self):
         from bt_gui.auth.login_dialog import LoginDialog
         
         def on_login_success(username):
             display_name = self._login_manager.get_current_user() or username
-            if hasattr(self, 'app') and hasattr(self.app, 'set_auth_status'):
-                self.app.set_auth_status(True, display_name)
             LogManager.debug_print(f"[Auth] 登录成功: {username} -> {display_name}")
-        
-        def on_login_failure():
-            if hasattr(self, 'app') and hasattr(self.app, 'set_auth_status'):
-                self.app.set_auth_status(False)
         
         dialog = LoginDialog(
             self.app,
             login_manager=self._login_manager,
             on_success=on_login_success,
-            on_failure=on_login_failure
         )
         self.app.wait_window(dialog)
     
     def _on_logout_click(self):
         self._login_manager.logout()
-        if hasattr(self, 'app') and hasattr(self.app, 'set_auth_status'):
-            self.app.set_auth_status(False)
         LogManager.debug_print("[Auth] 已登出")
     
     def get_login_manager(self):

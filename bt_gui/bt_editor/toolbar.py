@@ -22,7 +22,6 @@ class EditorToolbar(ctk.CTkFrame):
         on_start: Optional[Callable] = None,
         on_stop: Optional[Callable] = None,
         on_open_folder: Optional[Callable] = None,
-        on_toggle_ai: Optional[Callable] = None,
         **kwargs
     ):
         super().__init__(master, **kwargs)
@@ -39,7 +38,6 @@ class EditorToolbar(ctk.CTkFrame):
         self.on_start = on_start
         self.on_stop = on_stop
         self.on_open_folder = on_open_folder
-        self.on_toggle_ai = on_toggle_ai
         self.is_running = False
         
         self._dark_colors = Theme.get_dark_colors()
@@ -64,7 +62,6 @@ class EditorToolbar(ctk.CTkFrame):
         right_section = ctk.CTkFrame(main_container, fg_color="transparent")
         right_section.pack(side="right")
 
-        self._create_ai_button(right_section)
         self._create_open_folder_button(right_section)
         self._create_reset_view_button(right_section)
     
@@ -244,25 +241,6 @@ class EditorToolbar(ctk.CTkFrame):
         )
         self.open_folder_btn.pack(side="left", padx=Theme.DIMENSIONS['spacing_xs'])
 
-    def _create_ai_button(self, parent):
-        """创建 AI 助手切换按钮"""
-        self.ai_btn = ctk.CTkButton(
-            parent,
-            text="AI助手",
-            width=60,
-            height=Theme.DIMENSIONS['button_height'],
-            font=Theme.get_font('sm'),
-            fg_color=Theme.COLORS.get('primary', '#3B82F6'),
-            hover_color=Theme.COLORS.get('primary_hover', '#2563EB'),
-            corner_radius=Theme.DIMENSIONS['button_corner_radius'],
-            command=self._on_ai_click
-        )
-        self.ai_btn.pack(side="left", padx=Theme.DIMENSIONS['spacing_xs'])
-
-    def _on_ai_click(self):
-        if self.on_toggle_ai:
-            self.on_toggle_ai()
-    
     def _create_reset_view_button(self, parent):
         ctk.CTkButton(
             parent,

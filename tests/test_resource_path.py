@@ -19,8 +19,6 @@ def test_get_resource_path_finds_prompt_files():
         ("intent_analyzer.py", "intent_analysis.md"),
         ("node_selector.py", "node_selection.md"),
         ("vlm_analyzer.py", "vlm_analysis.md"),
-        ("dialogue_filler.py", "dialogue_fill.md"),
-        ("tree_modifier.py", "tree_modify.md"),
         ("iteration_engine.py", "failure_analysis.md"),
     ]
 
@@ -61,16 +59,12 @@ def test_ai_modules_load_prompt_files():
     from bt_cli.ai.intent_analyzer import IntentAnalyzer
     from bt_cli.ai.node_selector import NodeSelector
     from bt_cli.ai.vlm_analyzer import VLMAnalyzer
-    from bt_cli.ai.dialogue_filler import DialogueFiller
-    from bt_cli.ai.tree_modifier import TreeModifier
     from bt_cli.ai.iteration_engine import IterationEngine
 
     classes = [
         IntentAnalyzer,
         NodeSelector,
         VLMAnalyzer,
-        DialogueFiller,
-        TreeModifier,
         IterationEngine,
     ]
 

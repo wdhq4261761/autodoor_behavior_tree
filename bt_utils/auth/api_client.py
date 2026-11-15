@@ -54,7 +54,7 @@ class PlatformAPIClient:
         self._session.headers.update({
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "AutoDoorEditor/1.0.0",
+            "User-Agent": "AutoDoorEditor",
         })
         self._token: Optional[str] = None
         self._token_expire_time: float = 0

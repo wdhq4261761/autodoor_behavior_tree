@@ -9,6 +9,7 @@ import asyncio
 from typing import Optional
 
 from bt_adapters.adapter_manager import AdapterManager
+from bt_utils.json_io import load_json
 
 
 class HeadlessRunner:
@@ -23,7 +24,7 @@ class HeadlessRunner:
         6. 启动引擎
     """
 
-    def __init__(self):
+    def __init__(self, enable_plugins: bool = False):
         self._engine = None
         self._context = None
         self._tree_file: Optional[str] = None
@@ -35,18 +36,25 @@ class HeadlessRunner:
         self._websocket_server = None
         self._server_thread = None
         self._plugin_loader = None
+        # CLI --plugins 只对本次进程生效，不写入用户配置
+        self._enable_plugins = enable_plugins
 
-    def run(self, tree_file: str, project_root: str = None) -> None:
+    def run(self, tree_file: str, project_root: str = None,
+            check_preflight: bool = True) -> int:
         """加载并运行行为树
 
         Args:
             tree_file: 行为树 JSON 文件路径
             project_root: 项目根目录，默认为行为树所在目录
+            check_preflight: 反序列化之前是否执行静态预检
+
+        Returns:
+            int: 退出码。0 正常结束，1 运行期失败（根节点失败或引擎异常），
+                 2 预检未通过而终止，130 用户中断
 
         Raises:
             Exception: 加载或运行失败时抛出异常（不返回 False）
         """
-        import json
         from bt_core.serializer import Serializer
         from bt_core.context import ExecutionContext
         from bt_core.engine import BehaviorTreeEngine
@@ -65,8 +73,19 @@ class HeadlessRunner:
         # 若先反序列化再加载插件，树里的插件节点会被无声丢弃且照常"跑成功"。
         self._load_plugins(settings)
 
-        with open(tree_file, 'r', encoding='utf-8-sig') as f:
-            tree_data = json.load(f)
+        tree_data = load_json(tree_file)
+
+        if check_preflight:
+            from bt_core.preflight import validate_tree_data
+            report = validate_tree_data(
+                tree_data,
+                project_root or os.path.dirname(os.path.abspath(tree_file)),
+            )
+            for line in report.format_lines():
+                print(line)
+            if report.has_errors:
+                print("预检未通过，已终止运行。使用 --no-preflight 可跳过。")
+                return 2
 
         result = Serializer.deserialize(tree_data)
         if isinstance(result, tuple):
@@ -89,15 +108,25 @@ class HeadlessRunner:
 
         self._engine.start(self._context)
 
+        interrupted = False
         try:
             while self._engine.get_status()['running'] and self._engine._thread.is_alive():
                 if self._stop_requested.is_set():
                     break
                 time.sleep(0.1)
         except KeyboardInterrupt:
+            interrupted = True
             self._engine.stop()
         finally:
             self._stop_service_layer()
+
+        if interrupted:
+            return 130
+
+        from bt_core.status import NodeStatus
+        if self._engine.get_last_status() == NodeStatus.FAILURE:
+            return 1
+        return 0
 
     def _start_service_layer(self, settings) -> None:
         """启动服务层（消息总线、适配器、服务注册、REST/WebSocket 服务器）"""
@@ -164,7 +193,7 @@ class HeadlessRunner:
 
         必须在行为树反序列化之前调用，保证插件节点类型已注册进 NodeRegistry。
         """
-        if not settings.get("plugins.enabled", False):
+        if not (self._enable_plugins or settings.get("plugins.enabled", False)):
             return
 
         try:
@@ -176,7 +205,7 @@ class HeadlessRunner:
 
             # 扫描内置插件目录
             import os
-            from bt_utils.resource_manager import get_builtin_plugins_dir, get_user_plugin_dir
+            from bt_utils.resource_manager import ensure_user_plugin_dir, get_builtin_plugins_dir
             builtin_dir = get_builtin_plugins_dir()
             if os.path.isdir(builtin_dir):
                 for info in self._plugin_loader.scan(builtin_dir):
@@ -184,7 +213,7 @@ class HeadlessRunner:
                     self._plugin_loader.load_plugin(plugin_dir)
 
             # 扫描用户插件目录（打包版落在 exe 同级，不依赖 cwd）
-            user_dir = get_user_plugin_dir()
+            user_dir = ensure_user_plugin_dir()
             if os.path.isdir(user_dir):
                 for info in self._plugin_loader.scan(user_dir):
                     plugin_dir = os.path.join(user_dir, info.name)

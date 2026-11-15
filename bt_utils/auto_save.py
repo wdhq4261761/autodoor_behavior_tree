@@ -160,7 +160,7 @@ class AutoSaveManager:
             return None
         
         try:
-            with gzip.open(autosave_1, 'rt', encoding='utf-8') as f:
+            with gzip.open(autosave_1, 'rt', encoding='utf-8-sig') as f:
                 return json.load(f)
         except Exception:
             return None

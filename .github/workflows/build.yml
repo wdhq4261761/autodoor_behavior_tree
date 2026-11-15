@@ -1,6 +1,6 @@
 # GitHub Actions 配置文件
 # 实现 Windows 统一版自动构建（DD/Normal 合并为单一版本）
-# 适配模块化架构 v2.3.0
+# 适配模块化架构 v2.x
 name: AutoDoor BehaviorTree Build and Release
 
 on:
@@ -84,6 +84,11 @@ jobs:
     - name: Build Unified Version with PyInstaller
       run: pyinstaller autodoor_bt.spec --noconfirm
 
+    - name: Post-process release package
+      run: |
+        $VERSION = "${{ steps.get_version.outputs.VERSION }}"
+        python scripts/post_build.py "dist/autodoor-behaviortree-$VERSION"
+
     - name: Verify build output
       run: |
         $VERSION = "${{ steps.get_version.outputs.VERSION }}"
@@ -102,6 +107,18 @@ jobs:
           Write-Host "ERROR Build failed: $EXE_NAME not found"
           Write-Host "Looking for: ${{ github.workspace }}\dist\$DIR_NAME\$EXE_NAME"
           exit 1
+        }
+
+        # Release must ship the whitelisted plugins; the GUI version is useless
+        # without vlm_vision / uia_bridge and the example plugin.
+        foreach ($p in @("example", "uia_bridge", "vlm_vision")) {
+          $manifest = "${{ github.workspace }}\dist\$DIR_NAME\plugins\$p\plugin.json"
+          if (Test-Path $manifest) {
+            Write-Host "OK plugin bundled: $p"
+          } else {
+            Write-Host "ERROR plugin missing from release: $p"
+            exit 1
+          }
         }
 
     - name: Archive Windows build
@@ -134,20 +151,17 @@ jobs:
         VERSION=$(jq -r '.version' build_config.json)
         
         if [[ -z "$VERSION" ]]; then
-          VERSION=$(git tag -l "v*" | sort -V | tail -n 1 | sed 's/^v//' || echo "0.0.0")
+          VERSION=$(git tag -l "autodoor_V*" | sort -V | tail -n 1 | sed 's/^autodoor_V//' || echo "0.0.0")
         fi
         
         echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-        echo "_TAG=v${VERSION}" >> $GITHUB_OUTPUT
         echo "_autodoor_TAG=autodoor_V${VERSION}" >> $GITHUB_OUTPUT
 
     - name: Check if need to create tag
       id: check_tag
       run: |
-        CURRENT_TAG="v${{ steps.get_version.outputs.VERSION }}"
         AUTODOOR_TAG="${{ steps.get_version.outputs._autodoor_TAG }}"
         
-        echo "Current version: $CURRENT_TAG"
         echo "Autodoor tag: $AUTODOOR_TAG"
         
         TAG_EXISTS=$(git tag -l "$AUTODOOR_TAG" | wc -l)
@@ -184,7 +198,7 @@ jobs:
     - name: Create Release and upload assets
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        tag_name: ${{ steps.get_version.outputs._autodoor_TAG }}
         name: Release ${{ steps.get_version.outputs.VERSION }}
         body_path: UPDATE_CONTENT.md
         draft: false

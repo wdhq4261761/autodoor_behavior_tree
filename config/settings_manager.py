@@ -4,6 +4,7 @@ import copy
 import datetime
 from typing import Any, Dict, Optional, List, Callable
 from bt_utils.log_manager import LogManager
+from bt_utils.json_io import load_json
 from dataclasses import dataclass, field, asdict
 from bt_utils.singleton import singleton
 
@@ -274,8 +275,7 @@ class SettingsManager:
         """加载设置"""
         if os.path.exists(self.config_file):
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    self.settings = json.load(f)
+                self.settings = load_json(self.config_file)
                 self._merge_defaults()
                 self._migrate_config()
             except Exception as e:

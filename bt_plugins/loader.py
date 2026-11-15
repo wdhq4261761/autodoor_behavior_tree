@@ -11,12 +11,12 @@
 所有插件回调用 try/except 包裹，单个插件异常不影响主进程。
 """
 import importlib.util
-import json
 import os
 import sys
 import threading
 from typing import Dict, List, Optional, Type
 
+from bt_utils.json_io import load_json
 from .base import BasePlugin, PluginContext, PluginInfo
 
 
@@ -63,10 +63,9 @@ class PluginLoader:
     def _read_manifest(self, path: str) -> Optional[PluginInfo]:
         """读取 plugin.json 并返回 PluginInfo"""
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (OSError, json.JSONDecodeError) as e:
-            print(f"[PluginLoader] 读取插件清单失败 {path}: {e}")
+            data = load_json(path)
+        except (OSError, ValueError) as e:
+            print(f"[PluginLoader] 读取插件清单失败: {e}")
             return None
         # 校验必填字段
         required = ("name", "display_name", "version", "author", "description")
@@ -117,10 +116,9 @@ class PluginLoader:
 
             # 读取入口文件与类名（plugin.json 中的 entry/class 字段，不在 PluginInfo 中）
             try:
-                with open(manifest_path, "r", encoding="utf-8") as f:
-                    raw_manifest = json.load(f)
-            except (OSError, json.JSONDecodeError) as e:
-                print(f"[PluginLoader] 读取入口配置失败 {manifest_path}: {e}")
+                raw_manifest = load_json(manifest_path)
+            except (OSError, ValueError) as e:
+                print(f"[PluginLoader] 读取入口配置失败: {e}")
                 return False
             entry_file = raw_manifest.get("entry", "main.py")
             class_name = raw_manifest.get("class", "")

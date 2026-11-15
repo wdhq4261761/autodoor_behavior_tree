@@ -20,6 +20,7 @@ class BehaviorTreeEngine:
     def __init__(self, root_node: Node = None):
         self.root_node = root_node
         self.context: Optional[ExecutionContext] = None
+        self.last_status: Optional[NodeStatus] = None
         self._running = False
         self._paused = False
         self._thread: Optional[threading.Thread] = None
@@ -90,6 +91,7 @@ class BehaviorTreeEngine:
             self.context = context or ExecutionContext()
             self.context.set_stats_collector(self._stats)
             self._running = True
+            self.last_status = None
             self._paused = False
             self._stats.start_session()
 
@@ -180,6 +182,14 @@ class BehaviorTreeEngine:
             )
         if self._on_status_change:
             self._on_status_change("running")
+
+    def get_last_status(self) -> Optional[NodeStatus]:
+        """获取最近一次运行结束时根节点的最终状态。
+
+        根节点在完成后会被 reset()，因此不能直接读取 root_node.status。
+        用户主动停止或尚未运行时返回 None。
+        """
+        return self.last_status
 
     def get_status(self) -> Dict[str, Any]:
         """获取执行状态
@@ -276,6 +286,7 @@ class BehaviorTreeEngine:
                 from bt_utils.log_manager import LogManager
                 try:
                     status = self.root_node.tick(self.context)
+                    self.last_status = status
 
                     if self._on_node_status:
                         self._on_node_status(self.root_node.node_id, status.value)
@@ -297,6 +308,8 @@ class BehaviorTreeEngine:
                             self._on_status_change("completed", status)
                 except Exception as e:
                     import traceback
+                    status = NodeStatus.FAILURE
+                    self.last_status = status
                     error_traceback = traceback.format_exc()
                     error_msg = f"[ERROR] Engine._run_loop: 异常发生\n{error_traceback}"
                     LogManager.debug_print(error_msg)

@@ -75,7 +75,8 @@ class BaseMouseController(ABC):
         pass
 
     @abstractmethod
-    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
+    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None,
+                     horizontal: bool = False) -> None:
         pass
 
     def move_to(self, x: int, y: int) -> None:

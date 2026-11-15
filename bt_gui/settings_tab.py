@@ -1025,11 +1025,11 @@ class SettingsTab(ctk.CTkFrame):
         ai_header = ctk.CTkFrame(ai_frame, fg_color="transparent")
         ai_header.pack(fill="x", padx=Theme.DIMENSIONS['spacing_md'],
                         pady=(Theme.DIMENSIONS['spacing_md'], Theme.DIMENSIONS['spacing_sm']))
-        create_section_title(ai_header, "AI 助手配置", level=1).pack(side="left")
+        create_section_title(ai_header, "AI 模型配置", level=1).pack(side="left")
 
         ctk.CTkLabel(
             ai_header,
-            text="配置 LLM/VLM 接口以启用 AI 自动生成行为树",
+            text="配置 LLM/VLM 接口，供 DSH 编排、CLI AI 命令与视觉插件使用",
             font=Theme.get_font("xs"),
             text_color=self._dark_colors['text_muted'],
         ).pack(side="left", padx=(Theme.DIMENSIONS['spacing_sm'], 0))
@@ -1210,6 +1210,6 @@ class SettingsTab(ctk.CTkFrame):
             status = "已保存 — 仅 LLM（VLM 未配置，将跳过屏幕感知）"
             color = self._dark_colors.get('warning', '#F59E0B')
         else:
-            status = "已保存 — 未配置 API Key，AI 助手不可用"
+            status = "已保存 — 未配置 API Key，AI 功能不可用"
             color = self._dark_colors.get('error', '#EF4444')
         self._ai_status_label.configure(text=status, text_color=color)

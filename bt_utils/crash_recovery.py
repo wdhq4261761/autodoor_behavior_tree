@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from bt_utils.json_io import load_json
+
 
 class CrashRecoveryHandler:
     """崩溃恢复处理器
@@ -142,8 +144,7 @@ class CrashRecoveryHandler:
         
     def load_crash_file(self, filepath: str) -> Optional[Dict[str, Any]]:
         try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            return load_json(filepath)
         except Exception:
             return None
             

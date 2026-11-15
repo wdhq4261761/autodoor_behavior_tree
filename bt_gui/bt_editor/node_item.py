@@ -4,6 +4,7 @@ from enum import Enum
 import math
 
 from ..theme import Theme
+from bt_utils.json_io import load_json
 from .constants import NODE_CATEGORY_MAP, NODE_DISPLAY_NAMES
 
 
@@ -577,9 +578,7 @@ class SubtreeNodeItem(NodeItem):
         project_json = os.path.join(project_dir, "project.json")
         if os.path.exists(project_json):
             try:
-                import json
-                with open(project_json, 'r', encoding='utf-8') as f:
-                    proj_data = json.load(f)
+                proj_data = load_json(project_json)
                 main_tree = proj_data.get("main_tree", "tree.json")
                 tree_path = os.path.join(project_dir, main_tree)
                 if os.path.exists(tree_path):
@@ -677,9 +676,7 @@ class SubtreeNodeItem(NodeItem):
         if not tree_file or not os.path.exists(tree_file):
             return False
         try:
-            import json
-            with open(tree_file, 'r', encoding='utf-8') as f:
-                self._subtree_raw_data = json.load(f)
+            self._subtree_raw_data = load_json(tree_file)
             return True
         except Exception:
             return False

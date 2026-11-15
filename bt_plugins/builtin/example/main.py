@@ -3,6 +3,7 @@
 from bt_plugins.base import BasePlugin
 from bt_core.nodes import ActionNode
 from bt_core.status import NodeStatus
+from bt_utils.log_manager import LogManager
 
 
 class HelloNode(ActionNode):
@@ -14,7 +15,11 @@ class HelloNode(ActionNode):
         name = self.config.get("name", "World")
         message = f"Hello, {name}!"
         context.blackboard.set("greeting", message)
-        self.log("info", f"HelloNode 执行: {message}")
+        LogManager.instance().log_success(
+            node_type="问候节点",
+            node_name=self.name,
+            message=message,
+        )
         return NodeStatus.SUCCESS
 
 

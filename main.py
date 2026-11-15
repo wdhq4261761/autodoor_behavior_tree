@@ -94,10 +94,10 @@ except Exception as e:
     write_log(f"DPI awareness initialization failed: {e}")
     traceback.print_exc()
 
-write_log("Importing json and logging...")
-import json
+write_log("Importing logging...")
 import logging
-write_log("json and logging imported successfully")
+from bt_utils.json_io import load_json
+write_log("logging imported successfully")
 
 def get_resource_path(relative_path):
     """获取资源文件的绝对路径，支持PyInstaller打包后的路径"""
@@ -111,13 +111,12 @@ def load_version():
     
     if os.path.exists(build_info_file):
         try:
-            with open(build_info_file, 'r', encoding='utf-8') as f:
-                build_info = json.load(f)
-                return build_info.get('version', '1.0.0')
+            build_info = load_json(build_info_file)
+            return build_info.get('version', '0.0.0')
         except Exception:
             pass
     
-    return "1.2.2a"
+    return "0.0.0"
 
 def load_github_info():
     """从build_info.json加载GitHub仓库信息"""
@@ -125,10 +124,9 @@ def load_github_info():
     
     if os.path.exists(build_info_file):
         try:
-            with open(build_info_file, 'r', encoding='utf-8') as f:
-                build_info = json.load(f)
-                github = build_info.get('github', {})
-                return github.get('owner', 'wdhq4261761'), github.get('repo', 'autodoor_behavior_tree')
+            build_info = load_json(build_info_file)
+            github = build_info.get('github', {})
+            return github.get('owner', 'wdhq4261761'), github.get('repo', 'autodoor_behavior_tree')
         except Exception:
             pass
     
@@ -352,7 +350,9 @@ def main():
     args = parse_args()
 
     if args.headless:
-        run_headless(args.headless, args.project)
+        code = run_headless(args.headless, args.project)
+        if code:
+            sys.exit(code)
         return
 
     ensure_workspace_exists()

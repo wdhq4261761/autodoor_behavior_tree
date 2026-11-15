@@ -83,6 +83,7 @@ MOUSEEVENTF_RIGHTUP = 0x0010
 MOUSEEVENTF_MIDDLEDOWN = 0x0020
 MOUSEEVENTF_MIDDLEUP = 0x0040
 MOUSEEVENTF_WHEEL = 0x0800
+MOUSEEVENTF_HWHEEL = 0x01000
 MOUSEEVENTF_ABSOLUTE = 0x8000
 
 
@@ -529,18 +530,22 @@ class IbInputSimulatorInput(BaseInputController):
             else:
                 self._move_to(position)
 
-    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
+    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None,
+                     horizontal: bool = False) -> None:
         """鼠标滚轮（Hook + SendInput，驱动层）"""
         if not self._available:
             return
 
-        self._log(f"mouse_scroll: amount={amount}, position={position}")
-        delta = amount * 120  # WHEEL_DELTA = 120
+        self._log(f"mouse_scroll: amount={amount}, position={position}, horizontal={horizontal}")
+        delta = int(round(amount)) * 120  # WHEEL_DELTA = 120
+        if delta == 0:
+            return
+        flags = MOUSEEVENTF_HWHEEL if horizontal else MOUSEEVENTF_WHEEL
         with self._hook_context():
             if position:
                 self._move_to(position)
             self._send_inputs([self._make_mouse_input(
-                mouse_data=delta, flags=MOUSEEVENTF_WHEEL)])
+                mouse_data=delta, flags=flags)])
 
     def cleanup(self) -> None:
         """销毁驱动"""

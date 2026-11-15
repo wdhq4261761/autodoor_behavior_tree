@@ -10,13 +10,15 @@ def cmd_run(args):
         sys.exit(3)
 
     if args.headless:
-        _run_headless(args)
+        code = _run_headless(args)
+        if code:
+            sys.exit(code)
     else:
         _run_gui(args)
 
 
 def _run_headless(args):
-    """无 GUI 模式运行"""
+    """无 GUI 模式运行，返回退出码（0 成功，2 预检未通过）"""
     from bt_core.headless import HeadlessRunner
     from config.settings_manager import get_settings_manager
 
@@ -33,10 +35,8 @@ def _run_headless(args):
         settings.set("websocket_server.enabled", True)
         settings.set("websocket_server.host", args.ws_host)
         settings.set("websocket_server.port", args.ws_port)
-    if args.plugins:
-        settings.set("plugins.enabled", True)
 
-    # 落盘保存配置
+    # 落盘保存配置（--plugins 不落盘，避免一次运行永久改变后续行为）
     settings.save_settings()
 
     # 打印运行信息
@@ -51,18 +51,24 @@ def _run_headless(args):
     if args.plugins:
         print(f"  插件系统: 已启用")
 
-    runner = HeadlessRunner()
+    runner = HeadlessRunner(enable_plugins=args.plugins)
 
     try:
-        runner.run(args.tree_file, args.project)
+        code = runner.run(
+            args.tree_file, args.project,
+            check_preflight=not args.no_preflight,
+        )
     except KeyboardInterrupt:
         print("\n停止运行...")
         runner.stop()
+        return 0
     except Exception as e:
         print(f"运行错误: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+    return code
 
 
 def _run_gui(args):

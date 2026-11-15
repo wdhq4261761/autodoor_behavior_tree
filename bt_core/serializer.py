@@ -3,6 +3,7 @@ import os
 from typing import Dict, Any
 from datetime import datetime
 
+from bt_utils.json_io import load_json
 from .nodes import Node
 from .constants import ProjectConstants, get_app_version
 
@@ -200,8 +201,7 @@ class Serializer:
         ext = os.path.splitext(filepath)[1].lower()
 
         if ext == ".json":
-            with open(filepath, 'r', encoding='utf-8-sig') as f:
-                data = json.load(f)
+            data = load_json(filepath)
             return Serializer.deserialize(data)
         elif ext in (".yaml", ".yml"):
             try:

@@ -1,6 +1,7 @@
 """status 命令 — 查询运行状态"""
 import os
-import json
+
+from bt_utils.json_io import load_json
 
 
 def cmd_status(args):
@@ -10,8 +11,7 @@ def cmd_status(args):
     status_file = os.path.join(data_dir, "daemon_status.json")
 
     if os.path.isfile(status_file):
-        with open(status_file, "r", encoding="utf-8") as f:
-            status = json.load(f)
+        status = load_json(status_file)
         print(f"守护进程状态:")
         print(f"  PID: {status.get('pid', 'N/A')}")
         print(f"  启动时间: {status.get('start_time', 'N/A')}")

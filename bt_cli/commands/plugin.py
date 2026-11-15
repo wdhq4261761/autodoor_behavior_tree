@@ -20,7 +20,7 @@ def cmd_plugin(args):
     loader = PluginLoader(context)
 
     # 先扫描和加载已知的插件
-    from bt_utils.resource_manager import get_builtin_plugins_dir, get_user_plugin_dir
+    from bt_utils.resource_manager import ensure_user_plugin_dir, get_builtin_plugins_dir
     builtin_dir = get_builtin_plugins_dir()
     if os.path.isdir(builtin_dir):
         infos = loader.scan(builtin_dir)
@@ -29,7 +29,7 @@ def cmd_plugin(args):
             loader.load_plugin(plugin_dir)
 
     # 也扫描用户插件目录（打包版落在 exe 同级，不依赖 cwd）
-    user_dir = get_user_plugin_dir()
+    user_dir = ensure_user_plugin_dir()
     if os.path.isdir(user_dir):
         infos = loader.scan(user_dir)
         for info in infos:

@@ -444,12 +444,14 @@ class DDVirtualInput(BaseInputController):
         except Exception as e:
             self._log(f"mouse_move ERROR: {e}")
     
-    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None) -> None:
+    def mouse_scroll(self, amount: int, position: Tuple[int, int] = None,
+                     horizontal: bool = False) -> None:
         """鼠标滚轮
 
         Args:
             amount: 滚动量（点击数，正数向上，负数向下）
             position: 滚动位置 (x, y)
+            horizontal: True=水平滚动（DD_whl 不支持，改用 mouse_event(HWHEEL)）
 
         DD_whl()的参数定义（官方文档确认）:
             - 1 = 向前/向上滚动1格 (≈120 WHEEL_DELTA)
@@ -462,7 +464,19 @@ class DDVirtualInput(BaseInputController):
         """
         if not self._available or not self._dd_dll:
             return
-        
+
+        if horizontal:
+            if self._check_stop():
+                return
+            if position:
+                self._dd_dll.DD_mov(position[0], position[1])
+            delta = int(round(amount)) * 120
+            if delta == 0:
+                return
+            self._log(f"mouse_scroll horizontal: amount={amount}, delta={delta}, position={position}")
+            ctypes.windll.user32.mouse_event(0x01000, 0, 0, delta, 0)  # MOUSEEVENTF_HWHEEL
+            return
+
         try:
             if position:
                 self._dd_dll.DD_mov(position[0], position[1])

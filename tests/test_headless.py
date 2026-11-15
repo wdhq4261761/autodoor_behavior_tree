@@ -55,7 +55,7 @@ class TestHeadlessRunner(unittest.TestCase):
     def test_headless_run_simple_tree(self):
         from bt_core.headless import HeadlessRunner
         runner = HeadlessRunner()
-        # run() 返回 None，成功完成不抛出异常即为通过
+        # run() 返回退出码（0 表示正常结束），成功完成不抛出异常即为通过
         runner.run(self.tmp.name)
 
     def test_headless_stop(self):

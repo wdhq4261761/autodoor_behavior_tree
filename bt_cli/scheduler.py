@@ -7,6 +7,8 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
+from bt_utils.json_io import load_json
+
 
 class ScheduleTask:
     """定时任务"""
@@ -126,8 +128,7 @@ class Scheduler:
         """从文件加载定时任务"""
         if os.path.isfile(self.SCHEDULES_FILE):
             try:
-                with open(self.SCHEDULES_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                data = load_json(self.SCHEDULES_FILE)
                 for task_data in data.get("tasks", []):
                     task = ScheduleTask.from_dict(task_data)
                     self._tasks[task.task_id] = task
