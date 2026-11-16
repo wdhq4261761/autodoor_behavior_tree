@@ -69,8 +69,8 @@ def _run_cli(args, env, timeout=30):
     """运行 CLI 子进程"""
     return subprocess.run(
         [sys.executable, os.path.join(PROJECT_ROOT, "cli.py")] + args,
-        capture_output=True, text=True, cwd=PROJECT_ROOT,
-        timeout=timeout, env=env,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cwd=PROJECT_ROOT, timeout=timeout, env=env,
     )
 
 
