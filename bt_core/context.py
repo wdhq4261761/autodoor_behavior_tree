@@ -39,6 +39,10 @@ class ExecutionContext:
         self._path_resolver = None
         self._stats_collector = None
         self._bound_window: Optional[int] = None
+        # 截图通道：printwindow（默认，PC 原生）| screengrab（安卓窗口按屏幕抓取）
+        self._capture_mode: str = "printwindow"
+        # 绑定窗口内容区顶部需要扣除的标题栏高度（apkstart 应用窗口为 38px）
+        self._content_offset_top: int = 0
         self._previous_foreground_window: Optional[int] = None
         self._subtree_stack: List[str] = []
         self._parent_context: Optional['ExecutionContext'] = None
@@ -276,11 +280,17 @@ class ExecutionContext:
 
         # 执行截图
         if self._bound_window:
-            from bt_utils.window_capture import WindowCapture
-            if region:
-                screenshot = WindowCapture.capture_window_region(self._bound_window, region)
+            if self._capture_mode == "screengrab":
+                from bt_utils.window_screen_capture import capture_window_content
+                screenshot = capture_window_content(
+                    self._bound_window, region, self._content_offset_top
+                )
             else:
-                screenshot = WindowCapture.capture_window(self._bound_window)
+                from bt_utils.window_capture import WindowCapture
+                if region:
+                    screenshot = WindowCapture.capture_window_region(self._bound_window, region)
+                else:
+                    screenshot = WindowCapture.capture_window(self._bound_window)
         else:
             if self._screenshot_manager is None:
                 from bt_utils.screenshot import ScreenshotManager
@@ -448,9 +458,43 @@ class ExecutionContext:
     def get_bound_window(self) -> Optional[int]:
         return self._bound_window
 
+    def set_capture_mode(self, mode: str) -> None:
+        """设置截图通道
+
+        Args:
+            mode: printwindow（PC 原生）| screengrab（按窗口内容区抓屏幕）
+        """
+        if mode not in ("printwindow", "screengrab"):
+            raise ValueError(f"不支持的截图模式: {mode}")
+        self._capture_mode = mode
+
+    def get_capture_mode(self) -> str:
+        return self._capture_mode
+
+    def set_content_offset_top(self, offset: int) -> None:
+        """设置绑定窗口内容区顶部需要扣除的标题栏高度"""
+        self._content_offset_top = max(0, int(offset or 0))
+
+    def get_content_offset_top(self) -> int:
+        return self._content_offset_top
+
     def convert_to_screen_coords(self, region: tuple) -> tuple:
         if self._bound_window is None:
             return region
+
+        # 有内容区偏移时，以「内容区左上角」为原点换算
+        if self._content_offset_top > 0:
+            from bt_utils.window_geometry import (
+                content_point_to_screen,
+                content_region_to_screen,
+                get_content_rect,
+            )
+            content_rect = get_content_rect(self._bound_window, self._content_offset_top)
+            if content_rect:
+                if len(region) == 2:
+                    return content_point_to_screen(region, content_rect)
+                return content_region_to_screen(region, content_rect)
+
         from bt_utils.coordinate import CoordinateConverter
         if len(region) == 2:
             result = CoordinateConverter.client_to_absolute(region[0], region[1], self._bound_window)

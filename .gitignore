@@ -82,6 +82,7 @@ logs/
 # TRAE generated artifacts
 .trae-html-share-packages/
 .trae-reports/
+.trae/
 
 # Plugins: ignore all plugin folders except first-party ones shipped with the repo
 plugins/*
