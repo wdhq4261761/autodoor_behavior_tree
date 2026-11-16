@@ -16,7 +16,7 @@ def test_vlm_analyzer_null_response_raises_error():
     analyzer._vlm = MagicMock()
     analyzer._vlm.chat_with_image.return_value = {"content": "null"}
 
-    with patch.object(analyzer, "_encode_image", return_value="base64fake"):
+    with patch.object(analyzer, "_encode_image", return_value=("image/png", "base64fake")):
         with pytest.raises(VLMAnalysisError, match="应为对象"):
             analyzer.analyze("fake_path", {"nodes": [{"id": "n1", "empty_params": ["region"]}]}, "test")
 
@@ -29,7 +29,7 @@ def test_vlm_analyzer_array_response_raises_error():
     analyzer._vlm = MagicMock()
     analyzer._vlm.chat_with_image.return_value = {"content": "[1, 2, 3]"}
 
-    with patch.object(analyzer, "_encode_image", return_value="base64fake"):
+    with patch.object(analyzer, "_encode_image", return_value=("image/png", "base64fake")):
         with pytest.raises(VLMAnalysisError, match="应为对象"):
             analyzer.analyze("fake_path", {"nodes": [{"id": "n1", "empty_params": ["region"]}]}, "test")
 
@@ -85,7 +85,7 @@ def test_vlm_analyzer_valid_dict_works():
     }
 
     # patch _encode_image to avoid file read
-    with patch.object(analyzer, "_encode_image", return_value="base64fake"):
+    with patch.object(analyzer, "_encode_image", return_value=("image/png", "base64fake")):
         suggestions = analyzer.analyze("fake_path", {"nodes": [{"id": "n1", "empty_params": ["region"]}]}, "test")
 
     assert len(suggestions) == 1
