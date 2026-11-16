@@ -173,9 +173,11 @@ jobs:
         & $CLI plugin nodes | Out-Null
         if ($LASTEXITCODE -ne 0) { Write-Error "plugin nodes exit code: $LASTEXITCODE"; exit 1 }
 
-        $PROC = Start-Process -FilePath $CLI -ArgumentList @('run', "$SMOKE\long.json", '--headless', '--rest', '--rest-port', '18080') -PassThru -WindowStyle Hidden
+        $REST_OUT = Join-Path $SMOKE "rest.out"
+        $REST_ERR = Join-Path $SMOKE "rest.err"
+        $PROC = Start-Process -FilePath $CLI -ArgumentList @('run', "$SMOKE\long.json", '--headless', '--rest', '--rest-port', '18080') -PassThru -WindowStyle Hidden -RedirectStandardOutput $REST_OUT -RedirectStandardError $REST_ERR
         $HEALTHY = $false
-        for ($i = 0; $i -lt 30; $i++) {
+        for ($i = 0; $i -lt 60; $i++) {
           Start-Sleep -Milliseconds 500
           try {
             Invoke-RestMethod -Uri 'http://127.0.0.1:18080/api/v1/health' -TimeoutSec 2 | Out-Null
@@ -183,8 +185,15 @@ jobs:
             break
           } catch { }
         }
-        if (-not $PROC.HasExited) { Stop-Process -Id $PROC.Id -Force }
-        if (-not $HEALTHY) { Write-Error "REST health check failed"; exit 1 }
+        $EXITED = $PROC.HasExited
+        if (-not $EXITED) { Stop-Process -Id $PROC.Id -Force }
+        if (-not $HEALTHY) {
+          Write-Host "REST process exited early: $EXITED"
+          if (Test-Path $REST_OUT) { Get-Content $REST_OUT }
+          if (Test-Path $REST_ERR) { Get-Content $REST_ERR }
+          Write-Error "REST health check failed"
+          exit 1
+        }
 
         Write-Host "Packaged CLI smoke test passed"
 

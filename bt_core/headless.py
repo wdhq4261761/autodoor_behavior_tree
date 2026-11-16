@@ -130,7 +130,12 @@ class HeadlessRunner:
 
     def _start_service_layer(self, settings) -> None:
         """启动服务层（消息总线、适配器、服务注册、REST/WebSocket 服务器）"""
-        if not settings.get("message_bus.enabled", False):
+        # REST / WebSocket 服务依赖消息总线与 ServiceRegistry，因此只要
+        # 任一服务被显式开启，也必须初始化整个服务层；否则 CLI 的
+        # --rest / --ws 在未开 message_bus 时会静默不启动任何服务。
+        if not (settings.get("message_bus.enabled", False)
+                or settings.get("rest_server.enabled", False)
+                or settings.get("websocket_server.enabled", False)):
             return
 
         from bt_bus.message_bus import MessageBus
