@@ -20,6 +20,12 @@ import sys
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
+# CI 的 Windows runner 默认 stdout 编码是 cp1252，直接 print 中文会抛
+# UnicodeEncodeError 并中断打包后处理。统一改为 UTF-8，日志也可读。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 # (源目录, 产物内目录名)
 PLUGIN_WHITELIST = [
     (os.path.join("bt_plugins", "builtin", "example"), "example"),
